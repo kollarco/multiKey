@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3, 2026-11-14
+- New: **MPE per-note pitch bend.** Each voice follows the bends on its own MIDI channel (channels 2-16). The device is marked MPE-enabled so Live sends per-note data.
+- New: **normal pitch wheel.** Bends on channel 1 move all notes together.
+- New: *Wheel* and *MPE* bend-range boxes (defaults 2 and 48 semitones, the MPE standard).
+- Output trimmed a further 3 dB (-10 dB total).
+
 ## v0.2, 2026-11-14
 - New: **Spread** knob, a random pan per note (0% = centre, 100% = anywhere from hard left to hard right). Seeded renders keep their panning.
 - Fix: Re-roll got stuck at 256 (Live caps integer parameters at 256 values). Seed Value is now 1-9999.

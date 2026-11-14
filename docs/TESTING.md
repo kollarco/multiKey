@@ -1,5 +1,13 @@
 # Testing multiKey
 
+## v0.3 checks
+- [ ] Volume feels right now (another -3 dB)
+- [ ] Normal pitch wheel bends all notes; *Wheel* range changes how far
+- [ ] MPE controller (or MPE pitch curves drawn in a clip): each note bends on its own
+- [ ] Bend sounds smooth, with no zipper/stepping
+- [ ] A note that's released doesn't jump when the next note on the same channel bends
+- [ ] If per-note bends don't arrive: right-click the device title, check MPE is enabled, and report back
+
 ## v0.2 checks
 - [ ] Re-roll gives a new number every click (no longer stuck at 256)
 - [ ] Chords no longer distort at the default volume

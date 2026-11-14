@@ -122,18 +122,23 @@ def live_param(longname, ptype, mmin=0.0, mmax=1.0, initial=0.0, unit=1,
 
 # --------------------------------------------------------------------------
 # Voice patcher: one instance per voice inside [poly~]
-# Incoming list (via poly~ "midinote"):  pitch  vel  sampleIndex  semitones  amp  pan
+# Incoming list (via poly~ "midinote"):  pitch  vel  sampleIndex  semitones  amp  pan  channel
 #   note-on : sampleIndex >= 1, plays <pool>.<index> transposed by `semitones`
-#   note-off: "pitch 0 0 0 0 0" -> envelope release
+#   note-off: "pitch 0 0 0 0 0 0" -> envelope release, stop following per-note bends
+#   pitch bend (bus #1-bend): "master <semis>" bends every voice,
+#                             "note <channel> <semis>" bends the voice playing on that channel (MPE)
 #   pan: -1 (left) .. 0 (centre) .. 1 (right), applied when the note starts
 # #1 = the pool name, passed with [poly~ ... @args ---mkpool]
 # --------------------------------------------------------------------------
 def build_voice():
     v = Patcher()
     inl = v.obj("in 1", 0, 1)
-    unp = v.obj("unpack 0 0 0 0. 0. 0.", 1, 6,
-                ["int", "int", "int", "float", "float", "float"])
+    unp = v.obj("unpack 0 0 0 0. 0. 0. 0", 1, 7,
+                ["int", "int", "int", "float", "float", "float", "int"])
     v.wire(inl, 0, unp)
+
+    ch_store = v.obj("i", 2, 1, ["int"])
+    v.wire(unp, 6, ch_store, 1)
 
     pan_store = v.obj("f", 2, 1, ["float"])
     v.wire(unp, 5, pan_store, 1)
@@ -148,21 +153,21 @@ def build_voice():
 
     idx_sel = v.obj("sel 0", 2, 2, ["bang", ""])
     v.wire(unp, 2, idx_sel)
-    start = v.obj("t b b b b i", 1, 5, ["bang", "bang", "bang", "bang", "int"])
+    start = v.obj("t b b b b b i", 1, 6, ["bang", "bang", "bang", "bang", "bang", "int"])
     v.wire(idx_sel, 1, start)
 
     setname = v.obj("sprintf set #1.%ld", 1, 1)
-    v.wire(start, 4, setname)
+    v.wire(start, 5, setname)
 
     groove = v.obj("groove~ #1.1 2 @loop 0", 3, 3, ["signal", "signal", "signal"])
     info = v.obj("info~ #1.1", 1, 11, [""] * 11)
     v.wire(setname, 0, groove)
     v.wire(setname, 0, info)
-    v.wire(start, 3, info)          # bang -> report channel count
+    v.wire(start, 4, info)          # bang -> report channel count
 
     # pan law: centre = full level on both sides, hard left = left only
     pan_t = v.obj("t f f", 1, 2, ["float", "float"])
-    v.wire(start, 2, pan_store)
+    v.wire(start, 3, pan_store)
     v.wire(pan_store, 0, pan_t)
     gain_l = v.obj(r"expr min(1.\, 1.41421*cos(($f1+1.)*0.785398))", 1, 1)
     gain_r = v.obj(r"expr min(1.\, 1.41421*sin(($f1+1.)*0.785398))", 1, 1)
@@ -170,9 +175,45 @@ def build_voice():
     v.wire(pan_t, 0, gain_r)
 
     sig = v.obj("sig~ 1.", 1, 1, ["signal"])
-    v.wire(start, 1, rate_store)
+    v.wire(start, 2, rate_store)
     v.wire(rate_store, 0, sig)
-    v.wire(sig, 0, groove)
+
+    # ---- pitch bend: rate = note rate * 2^((noteBend + masterBend)/12), smoothed ----
+    bend_pak = v.obj("pak 0. 0.", 2, 1)                    # noteBend masterBend
+    bend_ratio = v.obj(r"expr pow(2.\, ($f1+$f2)/12.)", 1, 1)
+    bend_ramp = v.msg("$1 3")
+    bend_line = v.obj("line~ 1.", 2, 2, ["signal", "bang"])
+    v.wire(bend_pak, 0, bend_ratio)
+    v.wire(bend_ratio, 0, bend_ramp)
+    v.wire(bend_ramp, 0, bend_line)
+    rate_mul = v.obj("*~", 2, 1, ["signal"])
+    v.wire(sig, 0, rate_mul)
+    v.wire(bend_line, 0, rate_mul, 1)
+    v.wire(rate_mul, 0, groove)
+
+    # which channel this voice follows: set at note-on, 0 at note-off
+    my_ch = v.obj("== 0", 2, 1, ["int"])
+    on_ch = v.obj("t i b", 1, 2, ["int", "bang"])
+    zero_bend = v.msg("0.")
+    v.wire(start, 1, ch_store)
+    v.wire(ch_store, 0, on_ch)
+    v.wire(on_ch, 1, zero_bend)
+    v.wire(zero_bend, 0, bend_pak, 0)                     # new note starts unbent
+    v.wire(on_ch, 0, my_ch, 1)
+
+    bend_r = v.obj("r #1-bend", 0, 1)
+    bend_route = v.obj("route note master", 1, 3)
+    v.wire(bend_r, 0, bend_route)
+    v.wire(bend_route, 1, bend_pak, 1)                    # master bend
+    nb_unp = v.obj("unpack 0 0.", 1, 2, ["int", "float"])
+    nb_store = v.obj("f", 2, 1, ["float"])
+    nb_sel = v.obj("sel 1", 2, 2, ["bang", ""])
+    v.wire(bend_route, 0, nb_unp)
+    v.wire(nb_unp, 1, nb_store, 1)
+    v.wire(nb_unp, 0, my_ch)
+    v.wire(my_ch, 0, nb_sel)
+    v.wire(nb_sel, 0, nb_store)
+    v.wire(nb_store, 0, bend_pak, 0)
 
     go = v.obj("t b b", 1, 2, ["bang", "bang"])
     v.wire(start, 0, go)
@@ -188,6 +229,9 @@ def build_voice():
     v.wire(unp, 1, vel_sel)
     rel = v.msg("0")
     v.wire(vel_sel, 0, rel)
+    stop_follow = v.msg("0")
+    v.wire(vel_sel, 0, stop_follow)
+    v.wire(stop_follow, 0, my_ch, 1)                      # released voice ignores later bends
     v.wire(rel, 0, adsr)             # 0 -> release
 
     # global parameters arrive on a device-local send
@@ -229,7 +273,7 @@ def build_voice():
     v.wire(panl, 0, outl)
     v.wire(panr, 0, outr)
 
-    v.comment("multiKey voice. #1 = pool name. Input: pitch vel index semitones amp pan",
+    v.comment("multiKey voice. #1 = pool name. Input: pitch vel index semitones amp pan channel",
               rect=[400, 10, 400, 20])
     return v
 
@@ -242,7 +286,7 @@ def build_main():
 
     # ---------- presentation: labels ----------
     m.comment("multiKey", pres=[8, 4, 120, 22], fontsize=16.0, fontface=1)
-    m.comment("v0.2", pres=[100, 9, 40, 16], fontsize=9.0)
+    m.comment("v0.3", pres=[100, 9, 40, 16], fontsize=9.0)
     m.comment("ENVELOPE", pres=[200, 8, 120, 16], fontsize=9.0, fontface=1)
     m.comment("PLAY", pres=[390, 8, 80, 16], fontsize=9.0, fontface=1)
     m.comment("RANDOM", pres=[485, 8, 80, 16], fontsize=9.0, fontface=1)
@@ -261,7 +305,7 @@ def build_main():
                  1, 2, ["signal", "signal"])
 
     # note-off: vel 0 -> release whichever voice holds this pitch
-    off = m.msg("midinote $1 0 0 0 0 0")
+    off = m.msg("midinote $1 0 0 0 0 0 0")
     m.wire(route0, 0, off)
     m.wire(off, 0, poly)
 
@@ -271,7 +315,8 @@ def build_main():
     unp = m.obj("unpack 0 0", 1, 2, ["int", "int"])      # vel pitch
     m.wire(gate_n, 0, unp)
 
-    pk = m.obj("pack 0 0 0 0. 0. 0.", 6, 1)               # pitch vel idx semis amp pan
+    pk = m.obj("pack 0 0 0 0. 0. 0. 0", 7, 1)             # pitch vel idx semis amp pan channel
+    m.wire(notein, 2, pk, 6)                              # channel arrives first (cold)
     pre = m.obj("prepend midinote", 1, 1)
     m.wire(pk, 0, pre)
     m.wire(pre, 0, poly)
@@ -360,8 +405,8 @@ def build_main():
                  outlettype=["signal", "signal", "", "float", "list"],
                  parameter_enable=1, varname="Volume", orientation=1,
                  saved_attribute_attributes=live_param("Volume", 0, -70.0, 6.0, 0.0, 4))
-    trim_l = m.obj("*~ 0.447", 2, 1, ["signal"])          # -7 dB headroom
-    trim_r = m.obj("*~ 0.447", 2, 1, ["signal"])
+    trim_l = m.obj("*~ 0.316", 2, 1, ["signal"])          # -10 dB headroom
+    trim_r = m.obj("*~ 0.316", 2, 1, ["signal"])
     m.wire(poly, 0, trim_l)
     m.wire(poly, 1, trim_r)
     m.wire(trim_l, 0, gain, 0)
@@ -435,6 +480,45 @@ def build_main():
     m.wire(rr_rand, 0, rr_plus)
     m.wire(rr_plus, 0, n_seed)
 
+    # ---------- pitch bend / MPE ----------
+    # channel 1 = master bend (all notes, normal pitch wheel), channels 2-16 = per-note (MPE)
+    xbend = m.obj("xbendin", 1, 2, ["int", "int"])
+    xb_pk = m.obj("pack 0 0", 2, 1)
+    m.wire(xbend, 1, xb_pk, 1)
+    m.wire(xbend, 0, xb_pk, 0)
+    xb_rev = m.obj("zl rev", 2, 2)
+    m.wire(xb_pk, 0, xb_rev)
+    xb_route = m.obj("route 1", 2, 2)
+    m.wire(xb_rev, 0, xb_route)
+    bendbus = m.obj("s %s-bend" % POOL, 1, 0)
+    master_semis = m.obj("expr ($f1-8192.)/8192.*$f2", 2, 1)
+    master_p = m.obj("prepend master", 1, 1)
+    m.wire(xb_route, 0, master_semis)
+    m.wire(master_semis, 0, master_p)
+    m.wire(master_p, 0, bendbus)
+    nb_unp = m.obj("unpack 0 0", 1, 2, ["int", "int"])    # channel value
+    nb_semis = m.obj("expr ($f1-8192.)/8192.*$f2", 2, 1)
+    nb_pk = m.obj("pack 0 0.", 2, 1)
+    nb_p = m.obj("prepend note", 1, 1)
+    m.wire(xb_route, 1, nb_unp)
+    m.wire(nb_unp, 1, nb_semis)
+    m.wire(nb_semis, 0, nb_pk, 1)
+    m.wire(nb_unp, 0, nb_pk, 0)
+    m.wire(nb_pk, 0, nb_p)
+    m.wire(nb_p, 0, bendbus)
+
+    m.comment("BEND", pres=[485, 108, 80, 16], fontsize=9.0, fontface=1)
+    m.comment("Wheel", pres=[485, 122, 50, 14], fontsize=9.0)
+    m.comment("MPE", pres=[540, 122, 50, 14], fontsize=9.0)
+    n_pbr = m.add("live.numbox", pres=[485, 136, 50, 15], numinlets=1, numoutlets=2,
+                  outlettype=["", "float"], parameter_enable=1, varname="PB Range",
+                  saved_attribute_attributes=live_param("PB Range", 1, 0.0, 48.0, 2.0, 7))
+    n_mper = m.add("live.numbox", pres=[540, 136, 50, 15], numinlets=1, numoutlets=2,
+                   outlettype=["", "float"], parameter_enable=1, varname="MPE Range",
+                   saved_attribute_attributes=live_param("MPE Range", 1, 0.0, 96.0, 48.0, 7))
+    m.wire(n_pbr, 0, master_semis, 1)
+    m.wire(n_mper, 0, nb_semis, 1)
+
     # ---------- sample pool ----------
     m.add("panel", pres=[8, 28, 176, 60], numinlets=1, numoutlets=0,
           bgcolor=[0.2, 0.2, 0.2, 1.0], rounded=4, background=1)
@@ -492,13 +576,13 @@ def build_main():
     m.wire(p_rest, 0, loader)
 
     # ---------- init on device load ----------
-    tinit = m.obj("t b b b b b b b b b b", 1, 10, ["bang"] * 10)
+    tinit = m.obj("t b b b b b b b b b b b b", 1, 12, ["bang"] * 12)
     m.wire(thisdev, 0, tinit)
     initmsg = m.msg("init")
-    m.wire(tinit, 9, initmsg)
+    m.wire(tinit, 11, initmsg)
     m.wire(initmsg, 0, loader)
-    for i, d in enumerate((d_att, d_dec, d_sus, d_rel, d_vel, d_trn, d_spr)):
-        m.wire(tinit, 8 - i, d)
+    for i, d in enumerate((d_att, d_dec, d_sus, d_rel, d_vel, d_trn, d_spr, n_pbr, n_mper)):
+        m.wire(tinit, 10 - i, d)
     m.wire(tinit, 1, pathmsg)
     m.wire(tinit, 0, propmsg)
 
@@ -534,7 +618,7 @@ def main():
         "openinpresentation": 1,
         "devicewidth": float(DEVICE_WIDTH),
         "latency": 0,
-        "is_mpe": 0,
+        "is_mpe": 1,                 # receive per-note channels/bends from Live
         "dependency_cache": [
             {"name": "multikey.voice.maxpat", "bootpath": ".", "type": "JSON", "implicit": 1},
             {"name": "multikey_loader.js", "bootpath": ".", "type": "TEXT", "implicit": 1},
