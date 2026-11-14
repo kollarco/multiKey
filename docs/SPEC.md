@@ -37,7 +37,8 @@ Live 12.4's Live API can load samples into Simpler (`SimplerDevice.replace_sampl
 
 ### v0.5
 - Zones tab: 3 fixed zones (Low ≤ B1, Mid C2–B3, High ≥ C4), on/off, Crossfade 0–12 st with linear 50%→0% probability, keyboard picture, empty-zone fallback
-- Customisable zone borders: later
+- v0.5.1: Low zone +12 st (bass samples are usually recorded low); waveform blanks on an empty zone
+- Customisable zone borders / per-zone octave: later
 
 ### Next candidates
 - MPE slide (CC74) and pressure → e.g. filter / volume per note

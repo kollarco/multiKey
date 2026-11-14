@@ -300,7 +300,7 @@ def build_main():
     S = []   # boxes shown on the Sound tab
     Z = []   # boxes shown on the Zones tab
     m.comment("multiKey", pres=[8, 4, 80, 22], fontsize=16.0, fontface=1)
-    m.comment("v0.5", pres=[84, 9, 34, 16], fontsize=9.0)
+    m.comment("v0.5.1", pres=[84, 9, 34, 16], fontsize=9.0)
     G.append(m.comment("ENVELOPE", pres=[256, 24, 120, 14], fontsize=9.0, fontface=1))
     G.append(m.comment("PLAY", pres=[444, 24, 80, 14], fontsize=9.0, fontface=1))
     G.append(m.comment("RANDOM", pres=[548, 24, 80, 14], fontsize=9.0, fontface=1))
@@ -636,7 +636,8 @@ def build_main():
     drop = m.add("dropfile", pres=[8, 26, 236, 80], numinlets=1, numoutlets=2,
                  outlettype=["", ""], border=0)      # on top of the waveform
     polybuf = m.obj("polybuffer~ %s" % POOL, 1, 2)
-    loader = m.obj("js multikey_loader.js %s" % POOL, 1, 8)
+    m.obj("buffer~ ---mkempty 10", 1, 2, ["float", "bang"])   # blank waveform for empty zones
+    loader = m.obj("js multikey_loader.js %s ---mkempty" % POOL, 1, 8)
     m.wire(loader, 7, ztab)
     zr_unp = m.obj("unpack 0 0 0 0 0 0 0 0", 1, 8, ["int"] * 8)
     m.wire(loader, 6, zr_unp)
@@ -753,7 +754,7 @@ def build_main():
     Z.append(m.comment("ZONES", pres=[256, 46, 80, 14], fontsize=9.0, fontface=1))
     Z.append(m.comment("Low up to B1, Mid C2-B3, High from C4. Near a border, notes can "
                        "also pick from the neighbouring zone: 50/50 at the border, fading "
-                       "to 0 at the Crossfade distance.",
+                       "to 0 at the Crossfade distance. Low plays an octave up.",
                        pres=[396, 22, 262, 56], fontsize=9.0, linecount=4))
     p_zon = m.obj("prepend zones", 1, 1)
     p_xf = m.obj("prepend xfade", 1, 1)

@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.5.1, 2026-11-14
+- Low zone sounds play an octave up (+12 st) when Zones is on, so a bass one-shot recorded at a low C sounds at its own pitch when you play a low C.
+- Switching to an empty zone clears the waveform instead of showing the previous zone's sound.
+
 ## v0.5, 2026-11-14
 - New: **Zones tab** with 3 fixed key zones: Low (up to B1), Mid (C2-B3), High (C4 and up).
   - With Zones on, a Low/Mid/High selector appears under the sound list. Loading, dropping, clearing and the list apply to the selected zone.

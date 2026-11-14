@@ -27,7 +27,7 @@
 //   1: umenu                        clear / append <name> / set <i>
 //   2: pattr                        set mk3 path zone dB st ...
 //   3: per-sound coll               clear / <index> <gain> <semitones>
-//   4: waveform~                    set <buffer name>
+//   4: waveform~                    set <buffer name>   (blank buffer when nothing is selected)
 //   5: UI                           name|vol|trn|label set ... / tp <thispatcher message>
 //   6: zone ranges                  c0 c1 c2 total base0 base1 base2 baseAll
 //   7: zone table coll              clear / <pitch> <zone> <neighbour> <probability>
@@ -47,8 +47,10 @@ setoutletassist(6, "zone counts / index bases");
 setoutletassist(7, "to zone table coll");
 
 var POOL = (jsarguments.length > 1) ? String(jsarguments[1]) : "mkpool";
+var EMPTY = (jsarguments.length > 2) ? String(jsarguments[2]) : "mkempty";   // blank buffer for the waveform
 var FORMAT = "mk3";               // mk3 path zone dB st ...
 var ZONE_NAMES = ["Low", "Mid", "High"];
+var ZONE_OCTAVE = [12, 0, 0];     // Low plays an octave up: bass one-shots are usually recorded low
 var BORDER1 = 47.5;               // between B1 (47) and C2 (48)
 var BORDER2 = 71.5;               // between B3 (71) and C4 (72)
 var AUDIO_RE = /\.(wav|wave|aif|aiff|flac|mp3|m4a|ogg|caf)$/i;
@@ -183,7 +185,8 @@ function store() {
 
 function sendCollRow(i) {
     var s = sounds[i];
-    outlet(3, i + 1, Math.pow(10, s.vol / 20), s.trn);
+    var semis = s.trn + (zonesOn ? ZONE_OCTAVE[s.zone] : 0);
+    outlet(3, i + 1, Math.pow(10, s.vol / 20), semis);
 }
 
 function sendZoneRanges() {
@@ -293,6 +296,8 @@ function showMenu() {
     if (selected >= 0) {
         outlet(1, "set", vis.indexOf(selected));
         outlet(4, "set", POOL + "." + (selected + 1));
+    } else {
+        outlet(4, "set", EMPTY);             // nothing in this zone: blank waveform
     }
     sendSoundUI();
 }
