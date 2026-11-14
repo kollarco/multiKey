@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.6, 2026-11-14
+- Fix: **the sample list is now saved with the Live set.** The storage object's "save with the set" flag was written to the wrong part of the file, so Max ignored it and nothing was saved (v0.1-v0.5).
+- New: **Preview** (Sound tab) plays the selected sound once at its original pitch, with its own Volume/Transpose.
+- New: **Solo** (Sound tab): every note plays the selected sound; follows the selection. "SOLO" shows next to the sample count while it's on.
+- High zone plays an octave down (-12 st) when Zones is on (Low stays +12).
+
 ## v0.5.1, 2026-11-14
 - Low zone sounds play an octave up (+12 st) when Zones is on, so a bass one-shot recorded at a low C sounds at its own pitch when you play a low C.
 - Switching to an empty zone clears the waveform instead of showing the previous zone's sound.

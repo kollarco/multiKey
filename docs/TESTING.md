@@ -1,5 +1,11 @@
 # Testing multiKey
 
+## v0.6 checks
+- [ ] **Save, close, reopen the set: samples (and zones, per-sound settings) come back**
+- [ ] Preview plays the selected sound once at its original pitch
+- [ ] Solo: every note plays the selected sound; changing the selection changes the soloed sound; "SOLO" appears next to the sample count
+- [ ] High zone sounds an octave lower than before
+
 ## v0.5 checks
 - [ ] Zones Off: everything behaves like v0.4 (one pool); the Low/Mid/High selector under the list is hidden
 - [ ] Zones On: the selector appears; dropping/loading a folder fills only the selected zone; the list shows only that zone

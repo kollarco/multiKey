@@ -300,7 +300,7 @@ def build_main():
     S = []   # boxes shown on the Sound tab
     Z = []   # boxes shown on the Zones tab
     m.comment("multiKey", pres=[8, 4, 80, 22], fontsize=16.0, fontface=1)
-    m.comment("v0.5.1", pres=[84, 9, 34, 16], fontsize=9.0)
+    m.comment("v0.6", pres=[84, 9, 34, 16], fontsize=9.0)
     G.append(m.comment("ENVELOPE", pres=[256, 24, 120, 14], fontsize=9.0, fontface=1))
     G.append(m.comment("PLAY", pres=[444, 24, 80, 14], fontsize=9.0, fontface=1))
     G.append(m.comment("RANDOM", pres=[548, 24, 80, 14], fontsize=9.0, fontface=1))
@@ -455,6 +455,8 @@ def build_main():
     # one urn per zone (0 Low, 1 Mid, 2 High, 3 = all sounds when Zones is off).
     # Each deals without repeats within a chord; its output + the zone's base = buffer index.
     idx_t = m.obj("t i i", 1, 2, ["int", "int"])
+    solo_x = m.obj("expr $i1*($i2==0) + $i2", 2, 1)       # Solo: right inlet = sound index (0 = off)
+    m.wire(solo_x, 0, idx_t)
     clr = m.msg("clear")
     m.wire(chord_open, 0, clr)
     urns, bases = [], []
@@ -464,7 +466,7 @@ def build_main():
         m.wire(zgate, z, u)
         m.wire(clr, 0, u)
         m.wire(u, 0, b)
-        m.wire(b, 0, idx_t)
+        m.wire(b, 0, solo_x)
         rf = m.obj("t b b", 1, 2, ["bang", "bang"])       # chord bigger than the zone: new deal
         rc = m.msg("clear")
         m.wire(u, 1, rf)
@@ -695,9 +697,13 @@ def build_main():
     m.wire(gt0, 0, gate_n)
 
     # sample list is saved with the Live set
-    pattr = m.obj("pattr mkfiles", 1, 3, ["", "", ""],
-                  parameter_enable=1, varname="mkfiles",
-                  saved_attribute_attributes=live_param("mkfiles", 3, invisible=1))
+    # For object boxes, Max keeps parameter mode in "saved_object_attributes" (a box-level
+    # parameter_enable is ignored, which is why v0.1-v0.5 never saved the sample list).
+    pattr = m.obj("pattr mkfiles", 1, 3, ["", "", ""], varname="mkfiles",
+                  saved_object_attributes={"parameter_enable": 1, "parameter_mappable": 0},
+                  saved_attribute_attributes={"valueof": {
+                      "parameter_longname": "mkfiles", "parameter_shortname": "mkfiles",
+                      "parameter_type": 3, "parameter_invisible": 1}})
     m.wire(loader, 2, pattr)
     p_rest = m.obj("prepend restore", 1, 1)
     m.wire(pattr, 0, p_rest)
@@ -706,8 +712,8 @@ def build_main():
     # ---------- Sound tab: settings for the sound selected in the list ----------
     S.append(m.comment("No sound selected", pres=[256, 26, 300, 16], fontsize=11.0, fontface=1))
     snd_name = S[-1]
-    S.append(m.comment("Settings for the sound selected in the list on the left. "
-                       "Applies on top of the Global settings.",
+    S.append(m.comment("Settings for the sound selected in the list on the left, on top of "
+                       "the Global settings. Solo: every note plays this sound.",
                        pres=[256, 44, 300, 28], fontsize=9.0, linecount=2))
 
     def snd_dial(longname, short, pres, mmin, mmax, unit, ptype):
@@ -719,9 +725,22 @@ def build_main():
                          invisible=2, initial_enable=0))   # hidden: values live in js
     d_svol = snd_dial("Sound Volume", "Volume", [256, 78, 44, 48], -36.0, 12.0, 4, 0)
     d_strn = snd_dial("Sound Transpose", "Transpose", [304, 78, 44, 48], -24.0, 24.0, 7, 1)
-    t_sreset = m.add("live.text", pres=[360, 94, 60, 16], numinlets=1, numoutlets=2,
+    t_prev = m.add("live.text", pres=[360, 78, 60, 16], numinlets=1, numoutlets=2,
+                   outlettype=["", ""], parameter_enable=0, mode=0, text="Preview")
+    t_solo = m.add("live.text", pres=[360, 98, 60, 16], numinlets=1, numoutlets=2,
+                   outlettype=["", ""], parameter_enable=0, mode=1, text="Solo", texton="Solo")
+    t_sreset = m.add("live.text", pres=[360, 118, 60, 16], numinlets=1, numoutlets=2,
                      outlettype=["", ""], parameter_enable=0, mode=0, text="Reset")
-    S.extend([d_svol, d_strn, t_sreset])
+    S.extend([d_svol, d_strn, t_prev, t_solo, t_sreset])
+    pv_route = m.obj("route bang 1", 1, 3)
+    pv_msg = m.msg("preview")
+    m.wire(t_prev, 0, pv_route)
+    m.wire(pv_route, 0, pv_msg)
+    m.wire(pv_route, 1, pv_msg)
+    m.wire(pv_msg, 0, loader)
+    p_solo = m.obj("prepend solo", 1, 1)
+    m.wire(t_solo, 0, p_solo)
+    m.wire(p_solo, 0, loader)
     p_svol = m.obj("prepend soundvol", 1, 1)
     p_strn = m.obj("prepend soundtrn", 1, 1)
     m.wire(d_svol, 0, p_svol)
@@ -734,12 +753,14 @@ def build_main():
     m.wire(sr_route, 0, sr_msg)
     m.wire(sr_route, 1, sr_msg)
     m.wire(sr_msg, 0, loader)
-    ui_route = m.obj("route name vol trn label tp", 1, 6)
+    ui_route = m.obj("route name vol trn label tp solo preview", 1, 8)
     m.wire(loader, 5, ui_route)
     m.wire(ui_route, 0, snd_name)
     m.wire(ui_route, 1, d_svol)
     m.wire(ui_route, 2, d_strn)
     m.wire(ui_route, 3, countlbl)
+    m.wire(ui_route, 5, solo_x, 1)
+    m.wire(ui_route, 6, poly)                             # preview note straight to the voices
 
     # ---------- Zones tab ----------
     z_on = m.add("live.tab", pres=[256, 28, 80, 16], numinlets=1, numoutlets=3,
@@ -754,7 +775,7 @@ def build_main():
     Z.append(m.comment("ZONES", pres=[256, 46, 80, 14], fontsize=9.0, fontface=1))
     Z.append(m.comment("Low up to B1, Mid C2-B3, High from C4. Near a border, notes can "
                        "also pick from the neighbouring zone: 50/50 at the border, fading "
-                       "to 0 at the Crossfade distance. Low plays an octave up.",
+                       "to 0 at the Crossfade distance. Low plays an octave up, High an octave down.",
                        pres=[396, 22, 262, 56], fontsize=9.0, linecount=4))
     p_zon = m.obj("prepend zones", 1, 1)
     p_xf = m.obj("prepend xfade", 1, 1)

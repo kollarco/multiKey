@@ -40,6 +40,9 @@ Live 12.4's Live API can load samples into Simpler (`SimplerDevice.replace_sampl
 - v0.5.1: Low zone +12 st (bass samples are usually recorded low); waveform blanks on an empty zone
 - Customisable zone borders / per-zone octave: later
 
+### v0.6
+- Saving fixed (pattr parameter mode lives in saved_object_attributes); Preview + Solo on the Sound tab; High zone −12 st
+
 ### Next candidates
 - MPE slide (CC74) and pressure → e.g. filter / volume per note
 - One-shot mode (ignore note-off, always play the full sample)
@@ -94,10 +97,11 @@ tabs: live.tab → thispatcher "script show/hide" on the Global / Sound / Zones 
 - **Generated .amxd header must match Max's** (meta chunk value 1, project block). Suspected cause of the v0.3 crash (generated file + MPE flag); the Max-saved version loaded fine.
 - **MPE without poly~'s MPE mode:** voices store their note's channel and filter a broadcast bend bus. This keeps our own allocation and extra per-note data (sample, pan) intact.
 - **Zone logic precomputed in js:** the crossfade curve and empty-zone fallbacks become a 128-row lookup table, so the note path stays a single [coll] lookup plus one random draw.
+- **Object-box parameter flags** (e.g. [pattr] parameter mode) go in `saved_object_attributes`, not on the box itself; Max ignores the box-level key.
 - **`---` names** make the sample pool unique per device instance, so two multiKeys on two tracks don't share samples.
 
 ## Open questions / risks to verify in Live
 - ~~Whether the generated `.amxd` loads in Live 12~~ (confirmed, v0.1)
 - ~~Whether dropping a folder from Finder works~~ (confirmed, v0.1; v0.4.1 fixed the waveform blocking drops)
-- Whether the saved sample list restores on set reload. (A Max-saved copy did not list `mkfiles` among its parameters, so this may need fixing.)
+- Whether the saved sample list restores on set reload. Cause found in v0.6: parameter mode for object boxes like [pattr] must be in `saved_object_attributes`; verify in Live.
 - Voice-busy handling of `adsr~`/`thispoly~` (there was a known bug in Max 9.0.5).

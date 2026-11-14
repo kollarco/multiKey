@@ -19,6 +19,8 @@
 //   zones <0|1>                     Zones off / on
 //   zone <0|1|2>                    zone shown in the list and targeted by loading
 //   xfade <semitones>               zone crossfade width
+//   preview                         play the selected sound once, at its original pitch
+//   solo <0|1>                      every note plays the selected sound
 //   restore <data..>                saved state from [pattr]
 //   init                            re-send everything (on device load)
 //
@@ -29,6 +31,7 @@
 //   3: per-sound coll               clear / <index> <gain> <semitones>
 //   4: waveform~                    set <buffer name>   (blank buffer when nothing is selected)
 //   5: UI                           name|vol|trn|label set ... / tp <thispatcher message>
+//                                   solo <index or 0> / preview midinote ...
 //   6: zone ranges                  c0 c1 c2 total base0 base1 base2 baseAll
 //   7: zone table coll              clear / <pitch> <zone> <neighbour> <probability>
 
@@ -50,7 +53,7 @@ var POOL = (jsarguments.length > 1) ? String(jsarguments[1]) : "mkpool";
 var EMPTY = (jsarguments.length > 2) ? String(jsarguments[2]) : "mkempty";   // blank buffer for the waveform
 var FORMAT = "mk3";               // mk3 path zone dB st ...
 var ZONE_NAMES = ["Low", "Mid", "High"];
-var ZONE_OCTAVE = [12, 0, 0];     // Low plays an octave up: bass one-shots are usually recorded low
+var ZONE_OCTAVE = [12, 0, -12];   // Low an octave up (bass samples are recorded low), High an octave down
 var BORDER1 = 47.5;               // between B1 (47) and C2 (48)
 var BORDER2 = 71.5;               // between B3 (71) and C4 (72)
 var AUDIO_RE = /\.(wav|wave|aif|aiff|flac|mp3|m4a|ogg|caf)$/i;
@@ -67,6 +70,9 @@ var ready = false;
 var zonesOn = false;
 var currentZone = 1;
 var xfadeSt = 0;
+var soloOn = false;
+var previewTask = null;
+var PREVIEW_PITCH = 0;            // C-2: lowest MIDI note, practically never played
 
 function pool() {
     if (pb === null) {
@@ -137,6 +143,23 @@ function poolPaths() {
         }
     }
     return paths;
+}
+
+function durationOf(i) {
+    var d;
+    try {
+        d = pool().dump();
+    } catch (e) {
+        return 2000;
+    }
+    if (d && d.length && d[0] instanceof Array) {
+        return d[i] ? Number(d[i][3]) || 2000 : 2000;
+    }
+    return d && d.length > i * 6 + 3 ? Number(d[i * 6 + 3]) || 2000 : 2000;
+}
+
+function sendSolo() {
+    outlet(5, "solo", (soloOn && selected >= 0) ? selected + 1 : 0);
 }
 
 function folderFiles(path) {
@@ -269,13 +292,14 @@ function sendSoundUI() {
 }
 
 function sendLabel() {
+    var solo = soloOn ? "SOLO / " : "";
     var c = counts();
     if (zonesOn) {
-        outlet(5, "label", "set", "L " + c[0] + " / M " + c[1] + " / H " + c[2]);
+        outlet(5, "label", "set", solo + "L " + c[0] + " / M " + c[1] + " / H " + c[2]);
     } else if (sounds.length === 0) {
         outlet(5, "label", "set", "drop a folder on the waveform");
     } else {
-        outlet(5, "label", "set", sounds.length + " samples");
+        outlet(5, "label", "set", solo + sounds.length + " samples");
     }
 }
 
@@ -300,6 +324,7 @@ function showMenu() {
         outlet(4, "set", EMPTY);             // nothing in this zone: blank waveform
     }
     sendSoundUI();
+    sendSolo();
 }
 
 // Push everything to the patcher. Call after any change to sounds/zones.
@@ -421,6 +446,33 @@ function select(i) {
     selected = vis[i];
     outlet(4, "set", POOL + "." + (selected + 1));
     sendSoundUI();
+    sendSolo();
+}
+
+function stopPreview() {
+    outlet(5, "preview", "midinote", PREVIEW_PITCH, 0, 0, 0, 0, 0, 0);
+}
+
+function preview() {
+    if (selected < 0 || selected >= sounds.length) {
+        return;
+    }
+    var s = sounds[selected];
+    if (previewTask !== null) {
+        previewTask.cancel();
+        stopPreview();
+    }
+    // original pitch + this sound's own Transpose and Volume (no zone octave, no velocity)
+    outlet(5, "preview", "midinote", PREVIEW_PITCH, 127, selected + 1, s.trn,
+           0.8 * Math.pow(10, s.vol / 20), 0, 1);
+    previewTask = new Task(stopPreview, this);
+    previewTask.schedule(durationOf(selected));
+}
+
+function solo(v) {
+    soloOn = !!v;
+    sendSolo();
+    sendLabel();
 }
 
 function soundvol(v) {
@@ -471,6 +523,9 @@ function xfade(v) {
 
 function restore() {
     var args = arrayfromargs(arguments);
+    if (String(args[0]) === "set") {
+        args.shift();
+    }
     if (args.join("|") === lastStored) {
         return;   // our own "set" echoing back from pattr
     }
