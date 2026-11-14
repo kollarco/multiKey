@@ -1,5 +1,15 @@
 # Testing multiKey
 
+## v0.5 checks
+- [ ] Zones Off: everything behaves like v0.4 (one pool); the Low/Mid/High selector under the list is hidden
+- [ ] Zones On: the selector appears; dropping/loading a folder fills only the selected zone; the list shows only that zone
+- [ ] Play across the keyboard: Low sounds below C2, Mid C2-B3, High from C4
+- [ ] Crossfade 0: hard borders. Crossfade 6: near C2 / C4 you hear a mix of both zones, more of the neighbour the closer you are to the border
+- [ ] The white crossfade areas on the keyboard picture grow and shrink with the knob
+- [ ] Empty zone: notes there borrow from the nearest filled zone (no silence)
+- [ ] Clear with Zones on clears only the selected zone
+- [ ] Save / reopen: zones and their sounds come back
+
 ## v0.4 checks
 - [ ] Device loads with the new layout; Global tab is shown and the Sound tab controls are hidden
 - [ ] Dropping a folder or file onto the waveform still works

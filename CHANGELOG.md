@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5, 2026-11-14
+- New: **Zones tab** with 3 fixed key zones: Low (up to B1), Mid (C2-B3), High (C4 and up).
+  - With Zones on, a Low/Mid/High selector appears under the sound list. Loading, dropping, clearing and the list apply to the selected zone.
+  - **Crossfade** (0-12 st, default 3): near a border a note can pick from the neighbouring zone. 50/50 at the border, falling linearly to 0 at the crossfade distance; beyond that is the safe zone (own sounds only).
+  - A note in an empty zone borrows from the nearest zone that has sounds.
+  - A keyboard picture shows the zones and the crossfade areas.
+  - Chord dealing (no repeats) works per zone; Seed also covers the zone choice.
+- Zones off = one shared pool, same behaviour as before.
+- Load folder now uses a folder dialog and loads into the current zone. Storage format `mk3` adds each sound's zone (older saves load into Mid).
+
 ## v0.4.1, 2026-11-14
 - Fix: drag and drop onto the waveform stopped working. The waveform display now sits in the background layer, so drops reach the drop target above it.
 

@@ -31,9 +31,13 @@ Live 12.4's Live API can load samples into Simpler (`SimplerDevice.replace_sampl
 ### v0.3 (done)
 - MPE per-note pitch bend (voices follow their own MIDI channel), pitch wheel on channel 1, bend ranges, -10 dB total trim
 
-### v0.4
+### v0.4 (done)
 - Layout: pool + waveform left; Global / Sound tabs right. Per-sound Volume + Transpose (saved). Spread/Vel swap. MPE range fixed at 48.
 - Per-sound envelopes deliberately left out (global vs per-sound envelopes gets confusing)
+
+### v0.5
+- Zones tab: 3 fixed zones (Low ≤ B1, Mid C2–B3, High ≥ C4), on/off, Crossfade 0–12 st with linear 50%→0% probability, keyboard picture, empty-zone fallback
+- Customisable zone borders: later
 
 ### Next candidates
 - MPE slide (CC74) and pressure → e.g. filter / volume per note
@@ -46,10 +50,10 @@ Live 12.4's Live API can load samples into Simpler (`SimplerDevice.replace_sampl
 - Weighted random, slot mute/solo, layering two samples per note
 
 ### Later
-- **Key zones** (up to 4): a separate pool per keyboard range (bass / keys / leads), with zone-level envelope, width (mono for bass), low-cut and level. Hierarchy: global → zone → slot.
+- **Zones, customisable:** movable borders, maybe a 4th zone, zone-level width (mono for bass), low-cut and level. Hierarchy: global → zone → sound.
 - VST/AU port.
 
-## Architecture (v0.4)
+## Architecture (v0.5)
 
 ```
 notes ─► [route note-on / note-off]
@@ -58,7 +62,9 @@ notes ─► [route note-on / note-off]
    pitch ─► semitones = pitch − 60 + transpose
    vel   ─► amp (velocity curve)
          ─► picker: onebang + delay (chord window) → clear urn on the first note of a chord
-                    urn (random without repeats) → sample index
+                    zone table [coll] (by pitch: zone, neighbour, P(neighbour)) + random → zone
+                    urn of that zone (random without repeats) + zone base → buffer index
+                    (urns: Low, Mid, High, All; zones are contiguous blocks of the polybuffer)
                     coll lookup (filled by js) → per-sound gain → amp, per-sound semitones → pitch
                     seed on & Live playing → urn reseeded from song position
          ─► pan = random(−1..1) × Spread (seeded together with the pick)
@@ -72,8 +78,9 @@ poly~ voice: groove~ plays <pool>.<index> at rate 2^(semitones/12), adsr~ envelo
 
 polybuffer~ <pool>  ◄── js multikey_loader.js (drop / dialogs / clear / select / per-sound settings / restore)
                           ├─► coll (index → gain, semitones), waveform~ (selected sound), Sound-tab UI
-                          └─► pattr (blob) saves "mk2 path dB st ..." in the Live set
-tabs: live.tab → thispatcher "script show/hide" on the Global / Sound box groups
+                          ├─► zone table coll (128 rows), urn sizes + zone base indices
+                          └─► pattr (blob) saves "mk3 path zone dB st ..." in the Live set
+tabs: live.tab → thispatcher "script show/hide" on the Global / Sound / Zones box groups
 ```
 
 ### Key decisions
@@ -85,10 +92,11 @@ tabs: live.tab → thispatcher "script show/hide" on the Global / Sound box grou
 - **Raw MIDI parsing:** [notein]/[xbendin] can report channel 1 for everything in Max for Live, so MIDI is parsed from [midiin] bytes.
 - **Generated .amxd header must match Max's** (meta chunk value 1, project block). Suspected cause of the v0.3 crash (generated file + MPE flag); the Max-saved version loaded fine.
 - **MPE without poly~'s MPE mode:** voices store their note's channel and filter a broadcast bend bus. This keeps our own allocation and extra per-note data (sample, pan) intact.
+- **Zone logic precomputed in js:** the crossfade curve and empty-zone fallbacks become a 128-row lookup table, so the note path stays a single [coll] lookup plus one random draw.
 - **`---` names** make the sample pool unique per device instance, so two multiKeys on two tracks don't share samples.
 
 ## Open questions / risks to verify in Live
 - ~~Whether the generated `.amxd` loads in Live 12~~ (confirmed, v0.1)
-- ~~Whether dropping a folder from Finder works~~ (confirmed, v0.1)
+- ~~Whether dropping a folder from Finder works~~ (confirmed, v0.1; v0.4.1 fixed the waveform blocking drops)
 - Whether the saved sample list restores on set reload. (A Max-saved copy did not list `mkfiles` among its parameters, so this may need fixing.)
 - Voice-busy handling of `adsr~`/`thispoly~` (there was a known bug in Max 9.0.5).

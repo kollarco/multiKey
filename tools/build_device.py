@@ -298,8 +298,9 @@ def build_main():
     # right: tabs. GLOBAL = all sounds, SOUND = the sound selected in the list
     G = []   # boxes shown on the Global tab
     S = []   # boxes shown on the Sound tab
+    Z = []   # boxes shown on the Zones tab
     m.comment("multiKey", pres=[8, 4, 80, 22], fontsize=16.0, fontface=1)
-    m.comment("v0.4.1", pres=[84, 9, 34, 16], fontsize=9.0)
+    m.comment("v0.5", pres=[84, 9, 34, 16], fontsize=9.0)
     G.append(m.comment("ENVELOPE", pres=[256, 24, 120, 14], fontsize=9.0, fontface=1))
     G.append(m.comment("PLAY", pres=[444, 24, 80, 14], fontsize=9.0, fontface=1))
     G.append(m.comment("RANDOM", pres=[548, 24, 80, 14], fontsize=9.0, fontface=1))
@@ -398,6 +399,8 @@ def build_main():
     m.wire(snd_add, 0, pk, 3)
     pstore = m.obj("i", 2, 1, ["int"])
     m.wire(tp, 0, pstore, 1)
+    zstore = m.obj("i", 2, 1, ["int"])                    # pitch for the zone lookup
+    m.wire(tp, 0, zstore, 1)
 
     # then velocity: pick sample (+ reseed), pan, amp, vel, then fire with pitch
     tv = m.obj("t b i b i b", 1, 5, ["bang", "int", "bang", "int", "bang"])
@@ -425,15 +428,51 @@ def build_main():
     window = m.obj("delay 30", 2, 1, ["bang"])            # chord window
     m.wire(chord_open, 2, window)
     m.wire(window, 0, once, 1)                            # re-arm after the window
-    urn = m.obj("urn 1", 2, 2, ["int", "bang"])
+    # zone choice: table lookup by pitch -> "zone neighbour probability" (filled by js),
+    # then a random draw decides between the note's own zone and its neighbour
+    ztab = m.obj("coll", 1, 4, ["", "", "", ""])
+    m.wire(pick, 0, zstore)
+    m.wire(zstore, 0, ztab)
+    zrow_t = m.obj("t l b", 1, 2, ["", "bang"])
+    m.wire(ztab, 0, zrow_t)
+    zrand = m.obj("random 10000", 2, 1, ["int"])
+    zscale = m.obj("/ 10000.", 2, 1, ["float"])
+    zapp = m.obj("append 0.", 2, 1)
+    m.wire(zrow_t, 1, zrand)
+    m.wire(zrand, 0, zscale)
+    m.wire(zscale, 0, zapp, 1)
+    m.wire(zrow_t, 0, zapp)
+    zexpr = m.obj("expr ($f4 < $f3) * $i2 + ($f4 >= $f3) * $i1", 4, 1)
+    m.wire(zapp, 0, zexpr)
+    zt = m.obj("t b i", 1, 2, ["bang", "int"])
+    m.wire(zexpr, 0, zt)
+    zplus = m.obj("+ 1", 2, 1, ["int"])
+    zgate = m.obj("gate 4", 2, 4)
+    m.wire(zt, 1, zplus)
+    m.wire(zplus, 0, zgate)
+    m.wire(zt, 0, zgate, 1)
+
+    # one urn per zone (0 Low, 1 Mid, 2 High, 3 = all sounds when Zones is off).
+    # Each deals without repeats within a chord; its output + the zone's base = buffer index.
+    idx_t = m.obj("t i i", 1, 2, ["int", "int"])
     clr = m.msg("clear")
     m.wire(chord_open, 0, clr)
-    m.wire(clr, 0, urn)
-    m.wire(pick, 0, urn)
-    plus1 = m.obj("+ 1", 2, 1, ["int"])                   # polybuffer~ is 1-based
-    m.wire(urn, 0, plus1)
-    idx_t = m.obj("t i i", 1, 2, ["int", "int"])
-    m.wire(plus1, 0, idx_t)
+    urns, bases = [], []
+    for z in range(4):
+        u = m.obj("urn 1", 2, 2, ["int", "bang"])
+        b = m.obj("+ 1", 2, 1, ["int"])
+        m.wire(zgate, z, u)
+        m.wire(clr, 0, u)
+        m.wire(u, 0, b)
+        m.wire(b, 0, idx_t)
+        rf = m.obj("t b b", 1, 2, ["bang", "bang"])       # chord bigger than the zone: new deal
+        rc = m.msg("clear")
+        m.wire(u, 1, rf)
+        m.wire(rf, 1, rc)
+        m.wire(rc, 0, u)
+        m.wire(rf, 0, u)
+        urns.append(u)
+        bases.append(b)
     snd_coll = m.obj("coll", 1, 4, ["", "", "", ""])      # index -> gain semitones (filled by js)
     snd_unp = m.obj("unpack 0. 0.", 1, 2, ["float", "float"])
     m.wire(idx_t, 1, snd_coll)
@@ -441,13 +480,6 @@ def build_main():
     m.wire(snd_unp, 1, snd_add)
     m.wire(snd_unp, 0, amp, 2)
     m.wire(idx_t, 0, pk, 2)
-    # chord bigger than the pool: start a fresh deal
-    refill = m.obj("t b b", 1, 2, ["bang", "bang"])
-    m.wire(urn, 1, refill)
-    clr2 = m.msg("clear")
-    m.wire(refill, 1, clr2)
-    m.wire(clr2, 0, urn)
-    m.wire(refill, 0, urn)
 
     # ---------- seed: picks derived from song position (only while Live is playing) ----------
     g_seed = m.obj("gate 1", 2, 1)
@@ -463,7 +495,9 @@ def build_main():
     m.wire(quant, 0, hsh)
     seedmsg = m.obj("prepend seed", 1, 1)
     m.wire(hsh, 0, seedmsg)
-    m.wire(seedmsg, 0, urn)
+    for u in urns:
+        m.wire(seedmsg, 0, u)
+    m.wire(seedmsg, 0, zrand)
     m.wire(seedmsg, 0, pan_rand)                          # seeded renders keep their panning
 
     # Live transport state -> g_play
@@ -602,7 +636,13 @@ def build_main():
     drop = m.add("dropfile", pres=[8, 26, 236, 80], numinlets=1, numoutlets=2,
                  outlettype=["", ""], border=0)      # on top of the waveform
     polybuf = m.obj("polybuffer~ %s" % POOL, 1, 2)
-    loader = m.obj("js multikey_loader.js %s" % POOL, 1, 6)
+    loader = m.obj("js multikey_loader.js %s" % POOL, 1, 8)
+    m.wire(loader, 7, ztab)
+    zr_unp = m.obj("unpack 0 0 0 0 0 0 0 0", 1, 8, ["int"] * 8)
+    m.wire(loader, 6, zr_unp)
+    for z in range(4):
+        m.wire(zr_unp, z, urns[z], 1)                     # zone size -> urn range
+        m.wire(zr_unp, 4 + z, bases[z], 1)                # zone base index
     m.wire(loader, 3, snd_coll)
     m.wire(loader, 4, wave)
     p_drop = m.obj("prepend drop", 1, 1)
@@ -623,7 +663,16 @@ def build_main():
         m.wire(mm, 0, loader)
         return b
 
-    button("Load folder", [8, 132, 90, 16], "loadfolder")
+    lf = m.add("live.text", pres=[8, 132, 90, 16], numinlets=1, numoutlets=2,
+               outlettype=["", ""], parameter_enable=0, mode=0, text="Load folder")
+    lf_r = m.obj("route bang 1", 1, 3)
+    lf_dlg = m.obj("opendialog fold", 2, 2, ["", "bang"])
+    lf_p = m.obj("prepend loadfolderpath", 1, 1)
+    m.wire(lf, 0, lf_r)
+    m.wire(lf_r, 0, lf_dlg)
+    m.wire(lf_r, 1, lf_dlg)
+    m.wire(lf_dlg, 0, lf_p)
+    m.wire(lf_p, 0, loader)
     button("Add file", [102, 132, 70, 16], "addfile")
     button("Clear", [176, 132, 68, 16], "clear")
 
@@ -640,13 +689,9 @@ def build_main():
     m.wire(loader, 0, rcount)
     tcount = m.obj("t i i i", 1, 3, ["int", "int", "int"])
     m.wire(rcount, 0, tcount)
-    m.wire(tcount, 2, urn, 1)                    # pool size -> urn range
     gt0 = m.obj("> 0", 2, 1, ["int"])
     m.wire(tcount, 1, gt0)
     m.wire(gt0, 0, gate_n)
-    cfmt = m.obj("sprintf set %ld samples", 1, 1)
-    m.wire(tcount, 0, cfmt)
-    m.wire(cfmt, 0, countlbl)
 
     # sample list is saved with the Live set
     pattr = m.obj("pattr mkfiles", 1, 3, ["", "", ""],
@@ -688,35 +733,85 @@ def build_main():
     m.wire(sr_route, 0, sr_msg)
     m.wire(sr_route, 1, sr_msg)
     m.wire(sr_msg, 0, loader)
-    ui_route = m.obj("route name vol trn", 1, 4)
+    ui_route = m.obj("route name vol trn label tp", 1, 6)
     m.wire(loader, 5, ui_route)
     m.wire(ui_route, 0, snd_name)
     m.wire(ui_route, 1, d_svol)
     m.wire(ui_route, 2, d_strn)
+    m.wire(ui_route, 3, countlbl)
+
+    # ---------- Zones tab ----------
+    z_on = m.add("live.tab", pres=[256, 28, 80, 16], numinlets=1, numoutlets=3,
+                 outlettype=["", "", "float"], parameter_enable=1, varname="Zones",
+                 num_lines_patching=1, num_lines_presentation=1,
+                 saved_attribute_attributes=live_param("Zones", 2, 0.0, 1.0, 0.0, 9,
+                                                       enum=["Off", "On"]))
+    d_xf = m.add("live.dial", pres=[344, 24, 44, 48], numinlets=1, numoutlets=2,
+                 outlettype=["", "float"], parameter_enable=1, varname="Crossfade",
+                 saved_attribute_attributes=live_param("Crossfade", 0, 0.0, 12.0, 3.0, 7))
+    Z.extend([z_on, d_xf])
+    Z.append(m.comment("ZONES", pres=[256, 46, 80, 14], fontsize=9.0, fontface=1))
+    Z.append(m.comment("Low up to B1, Mid C2-B3, High from C4. Near a border, notes can "
+                       "also pick from the neighbouring zone: 50/50 at the border, fading "
+                       "to 0 at the Crossfade distance.",
+                       pres=[396, 22, 262, 56], fontsize=9.0, linecount=4))
+    p_zon = m.obj("prepend zones", 1, 1)
+    p_xf = m.obj("prepend xfade", 1, 1)
+    m.wire(z_on, 0, p_zon)
+    m.wire(d_xf, 0, p_xf)
+    m.wire(p_zon, 0, loader)
+    m.wire(p_xf, 0, loader)
+    # keyboard picture: C0 (24) .. C6 (96) across 400 px, borders at 47.5 / 71.5
+    kb = lambda pitch: 256 + (pitch - 24) * 400.0 / 72
+    zcol = [[0.85, 0.45, 0.25, 1.0], [0.35, 0.65, 0.45, 1.0], [0.35, 0.55, 0.85, 1.0]]
+    edges = [24, 47.5, 71.5, 96]
+    for i, label in enumerate(["LOW", "MID", "HIGH"]):
+        x0, x1 = kb(edges[i]), kb(edges[i + 1])
+        Z.append(m.add("panel", pres=[x0, 100, x1 - x0, 26], numinlets=1, numoutlets=0,
+                       bgcolor=zcol[i], mode=0, rounded=0))
+        Z.append(m.comment(label, pres=[x0 + 4, 105, 60, 16], fontsize=9.0, fontface=1))
+    for i, nm in enumerate(["zxf1", "zxf2"]):
+        x = kb(edges[i + 1])
+        Z.append(m.add("panel", pres=[x - 8, 96, 16, 34], numinlets=1, numoutlets=0,
+                       bgcolor=[1.0, 1.0, 1.0, 0.35], mode=0, rounded=0, varname=nm))
+    for pitch, lbl in ((24, "C0"), (48, "C2"), (72, "C4"), (96, "C6")):
+        Z.append(m.comment(lbl, pres=[kb(pitch) - 8, 132, 30, 14], fontsize=8.0))
+
+    # zone selector under the sound list (shown only when Zones is on; js shows/hides it)
+    zsel = m.add("live.tab", pres=[8, 150, 236, 16], numinlets=1, numoutlets=3,
+                 outlettype=["", "", "float"], parameter_enable=1, varname="zonesel",
+                 num_lines_patching=1, num_lines_presentation=1,
+                 saved_attribute_attributes=live_param("Pool Zone", 2, 0.0, 2.0, 1.0, 9,
+                                                       enum=["Low", "Mid", "High"],
+                                                       invisible=1))
+    p_zone = m.obj("prepend zone", 1, 1)
+    m.wire(zsel, 0, p_zone)
+    m.wire(p_zone, 0, loader)
 
     # ---------- tabs ----------
-    tab = m.add("live.tab", pres=[256, 4, 140, 16], numinlets=1, numoutlets=3,
+    tab = m.add("live.tab", pres=[256, 4, 210, 16], numinlets=1, numoutlets=3,
                 outlettype=["", "", "float"], parameter_enable=1, varname="Tab",
                 num_lines_patching=1, num_lines_presentation=1,
-                saved_attribute_attributes=live_param("Tab", 2, 0.0, 1.0, 0.0, 9,
-                                                      enum=["Global", "Sound"],
+                saved_attribute_attributes=live_param("Tab", 2, 0.0, 2.0, 0.0, 9,
+                                                      enum=["Global", "Sound", "Zones"],
                                                       invisible=1))
-    gnames = [m.name(o, "g_%s" % o.replace("-", "")) for o in G]
-    snames = [m.name(o, "s_%s" % o.replace("-", "")) for o in S]
-    show_global = m.msg(", ".join(["script show %s" % n for n in gnames] +
-                                  ["script hide %s" % n for n in snames]))
-    show_sound = m.msg(", ".join(["script hide %s" % n for n in gnames] +
-                                 ["script show %s" % n for n in snames]))
-    tab_sel = m.obj("sel 0 1", 3, 3, ["bang", "bang", ""])
+    groups = [[m.name(o, "%s_%s" % (g, o.replace("-", ""))) for o in objs]
+              for g, objs in (("g", G), ("s", S), ("z", Z))]
+    tab_sel = m.obj("sel 0 1 2", 4, 4, ["bang", "bang", "bang", ""])
     tp_this = m.obj("thispatcher", 1, 2, ["", ""])
     m.wire(tab, 0, tab_sel)
-    m.wire(tab_sel, 0, show_global)
-    m.wire(tab_sel, 1, show_sound)
-    m.wire(show_global, 0, tp_this)
-    m.wire(show_sound, 0, tp_this)
+    for k in range(3):
+        cmds = []
+        for j, names in enumerate(groups):
+            verb = "show" if j == k else "hide"
+            cmds += ["script %s %s" % (verb, n) for n in names]
+        mm = m.msg(", ".join(cmds))
+        m.wire(tab_sel, k, mm)
+        m.wire(mm, 0, tp_this)
+    m.wire(ui_route, 4, tp_this)                          # js: crossfade picture, zone selector
 
     # ---------- init on device load (right to left) ----------
-    init_targets = [tab, "init", d_att, d_dec, d_sus, d_rel, d_vel, d_trn, d_spr, n_pbr,
+    init_targets = [tab, z_on, zsel, d_xf, "init", d_att, d_dec, d_sus, d_rel, d_vel, d_trn, d_spr, n_pbr,
                     "path", "prop"]
     n = len(init_targets)
     tinit = m.obj("t " + " ".join(["b"] * n), 1, n, ["bang"] * n)

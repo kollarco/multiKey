@@ -6,11 +6,12 @@ Built because stacking Simplers in a rack has two problems: swapping samples is 
 
 ## Status
 
-**v0.4, early prototype.** Loading and drag-and-drop confirmed working in Live 12. See [docs/TESTING.md](docs/TESTING.md) for what to try and what to report.
+**v0.5, early prototype.** Loading and drag-and-drop confirmed working in Live 12. See [docs/TESTING.md](docs/TESTING.md) for what to try and what to report.
 
-## What it does (v0.4)
+## What it does (v0.5)
 
 - **Layout:** the sample list and a waveform of the selected sound on the left; on the right a **Global** tab (affects every sound) and a **Sound** tab (Volume / Transpose for the selected sound only).
+- **Zones** (optional): separate sound pools for Low / Mid / High key ranges, with a crossfade so neighbouring zones blend near the borders.
 - **Sample pool:** drop a folder (or use *Load folder*) to load every one-shot in it. *Add file* adds one sample. The sample list is saved with your Live set.
 - **Chromatic playback:** every sample is assumed to be a **C**. C3 (MIDI 60) plays it at its original pitch, and other notes transpose it. A global *Transpose* knob fixes packs that aren't in C.
 - **A random pick per note:** each note draws its own sample, so a clicked-in chord no longer repeats one sample on every note.
