@@ -454,6 +454,7 @@ function stopPreview() {
 
 function preview() {
     if (selected < 0 || selected >= sounds.length) {
+        post("multiKey: preview - no sound selected\n");
         return;
     }
     var s = sounds[selected];

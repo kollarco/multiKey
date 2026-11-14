@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.6.2, 2026-11-14
+- Fix: Preview button didn't respond. The invisible drop area under it may have taken the click; the drop area now leaves the Preview corner free.
+- Fix: Solo didn't show blue. Live object colours follow the Live theme unless that link is cleared; it now is for the Solo button.
+
 ## v0.6.1, 2026-11-14
 - Fix: loaded sounds still weren't restored when reopening a set (settings were). The sample list was sent to the storage object with "set", which updates it silently, so Live never saw a change to save. It is now sent as a normal value.
 - An empty or initial stored value no longer wipes loaded sounds on load.

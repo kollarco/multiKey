@@ -300,7 +300,7 @@ def build_main():
     S = []   # boxes shown on the Sound tab
     Z = []   # boxes shown on the Zones tab
     m.comment("multiKey", pres=[8, 4, 80, 22], fontsize=16.0, fontface=1)
-    m.comment("v0.6.1", pres=[84, 9, 34, 16], fontsize=9.0)
+    m.comment("v0.6.2", pres=[84, 9, 34, 16], fontsize=9.0)
     G.append(m.comment("ENVELOPE", pres=[256, 24, 120, 14], fontsize=9.0, fontface=1))
     G.append(m.comment("PLAY", pres=[444, 24, 80, 14], fontsize=9.0, fontface=1))
     G.append(m.comment("RANDOM", pres=[548, 24, 80, 14], fontsize=9.0, fontface=1))
@@ -635,8 +635,12 @@ def build_main():
                  bgcolor=[0.12, 0.12, 0.12, 1.0],
                  waveformcolor=[0.55, 0.83, 0.93, 1.0],
                  selectioncolor=[0.0, 0.0, 0.0, 0.0])
-    drop = m.add("dropfile", pres=[8, 26, 236, 80], numinlets=1, numoutlets=2,
-                 outlettype=["", ""], border=0)      # on top of the waveform
+    # drop target over the waveform, split in two so nothing sits under the Preview button
+    # (top-right corner 188..244 x 26..44)
+    drop = m.add("dropfile", pres=[8, 26, 180, 80], numinlets=1, numoutlets=2,
+                 outlettype=["", ""], border=0)
+    drop2 = m.add("dropfile", pres=[188, 44, 56, 62], numinlets=1, numoutlets=2,
+                  outlettype=["", ""], border=0)
     polybuf = m.obj("polybuffer~ %s" % POOL, 1, 2)
     m.obj("buffer~ ---mkempty 10", 1, 2, ["float", "bang"])   # blank waveform for empty zones
     loader = m.obj("js multikey_loader.js %s ---mkempty" % POOL, 1, 8)
@@ -650,8 +654,9 @@ def build_main():
     m.wire(loader, 4, wave)
     p_drop = m.obj("prepend drop", 1, 1)
     p_type = m.obj("prepend droptype", 1, 1)
-    m.wire(drop, 1, p_type)
-    m.wire(drop, 0, p_drop)
+    for d in (drop, drop2):
+        m.wire(d, 1, p_type)
+        m.wire(d, 0, p_drop)
     m.wire(p_type, 0, loader)
     m.wire(p_drop, 0, loader)
 
@@ -726,12 +731,16 @@ def build_main():
     d_svol = snd_dial("Sound Volume", "Volume", [256, 78, 44, 48], -36.0, 12.0, 4, 0)
     d_strn = snd_dial("Sound Transpose", "Transpose", [304, 78, 44, 48], -24.0, 24.0, 7, 1)
     # Preview sits on the waveform's top-right corner (added after the drop target, so on top)
-    t_prev = m.add("live.text", pres=[192, 29, 49, 14], numinlets=1, numoutlets=2,
+    t_prev = m.add("live.text", pres=[191, 28, 51, 15], numinlets=1, numoutlets=2,
                    outlettype=["", ""], parameter_enable=0, mode=0, text="Preview")
     t_solo = m.add("live.text", pres=[360, 82, 60, 16], numinlets=1, numoutlets=2,
                    outlettype=["", ""], parameter_enable=0, mode=1, text="Solo", texton="Solo",
-                   activebgoncolor=[0.33, 0.62, 0.92, 1.0],      # Live's solo blue
-                   activetextoncolor=[0.0, 0.0, 0.0, 1.0])
+                   # Live's solo blue. Colours of live.* objects follow the Live theme unless
+                   # their theme link ("expression") is cleared.
+                   activebgoncolor=[0.33, 0.62, 0.92, 1.0], bgoncolor=[0.33, 0.62, 0.92, 1.0],
+                   activetextoncolor=[0.0, 0.0, 0.0, 1.0], textoncolor=[0.0, 0.0, 0.0, 1.0],
+                   saved_attribute_attributes={k: {"expression": ""} for k in (
+                       "activebgoncolor", "bgoncolor", "activetextoncolor", "textoncolor")})
     t_sreset = m.add("live.text", pres=[360, 102, 60, 16], numinlets=1, numoutlets=2,
                      outlettype=["", ""], parameter_enable=0, mode=0, text="Reset")
     S.extend([d_svol, d_strn, t_solo, t_sreset])
