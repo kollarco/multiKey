@@ -1,6 +1,14 @@
 # Changelog
 
-## v0.3.1, 2026-11-14 (confirmed working in Live 12: MPE bends, no crash)
+## v0.4, 2026-11-14
+- New layout: the sound pool on the left, tabs on the right. The device is now 720 px wide.
+- New: **waveform display** of the selected sound, in place of the drop area (still the drop target for folders and files).
+- New: **Global / Sound tabs.** Global holds everything that affects all sounds. Sound has **Volume** (-36..+12 dB) and **Transpose** (±24 st) for the sound selected in the list, plus Reset.
+- Per-sound settings are saved with the sample list (storage format `mk2`; old saves still load).
+- Swapped Spread and Vel > Vol.
+- Removed the MPE range box; per-note bend range is fixed at the MPE standard (48 st).
+
+## v0.3.1, 2026-11-14
 - Fix: v0.3 crashed Live when loading samples. The generated file header differed from what Max writes; the header and MPE fields now match a file saved by Max 9.1.
 - Fix: per-note MPE bends had no effect. MIDI is now parsed from the raw [midiin] stream (notes + pitch bend with real channels) instead of [notein]/[xbendin], which can report channel 1 for everything in Max for Live.
 

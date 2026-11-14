@@ -31,6 +31,10 @@ Live 12.4's Live API can load samples into Simpler (`SimplerDevice.replace_sampl
 ### v0.3 (done)
 - MPE per-note pitch bend (voices follow their own MIDI channel), pitch wheel on channel 1, bend ranges, -10 dB total trim
 
+### v0.4
+- Layout: pool + waveform left; Global / Sound tabs right. Per-sound Volume + Transpose (saved). Spread/Vel swap. MPE range fixed at 48.
+- Per-sound envelopes deliberately left out (global vs per-sound envelopes gets confusing)
+
 ### Next candidates
 - MPE slide (CC74) and pressure → e.g. filter / volume per note
 - One-shot mode (ignore note-off, always play the full sample)
@@ -45,7 +49,7 @@ Live 12.4's Live API can load samples into Simpler (`SimplerDevice.replace_sampl
 - **Key zones** (up to 4): a separate pool per keyboard range (bass / keys / leads), with zone-level envelope, width (mono for bass), low-cut and level. Hierarchy: global → zone → slot.
 - VST/AU port.
 
-## Architecture (v0.3.1)
+## Architecture (v0.4)
 
 ```
 notes ─► [route note-on / note-off]
@@ -55,6 +59,7 @@ notes ─► [route note-on / note-off]
    vel   ─► amp (velocity curve)
          ─► picker: onebang + delay (chord window) → clear urn on the first note of a chord
                     urn (random without repeats) → sample index
+                    coll lookup (filled by js) → per-sound gain → amp, per-sound semitones → pitch
                     seed on & Live playing → urn reseeded from song position
          ─► pan = random(−1..1) × Spread (seeded together with the pick)
          ─► "midinote pitch vel index semitones amp pan channel" → poly~ (32 voices) → −10 dB trim → volume
@@ -65,8 +70,10 @@ poly~ voice: groove~ plays <pool>.<index> at rate 2^(semitones/12), adsr~ envelo
              mono samples copied to both channels, pan applied at note start,
              envelope drives thispoly~ busy state
 
-polybuffer~ <pool>  ◄── js multikey_loader.js (drop / dialogs / clear / restore)
-                          └─► pattr (blob) saves the sample paths in the Live set
+polybuffer~ <pool>  ◄── js multikey_loader.js (drop / dialogs / clear / select / per-sound settings / restore)
+                          ├─► coll (index → gain, semitones), waveform~ (selected sound), Sound-tab UI
+                          └─► pattr (blob) saves "mk2 path dB st ..." in the Live set
+tabs: live.tab → thispatcher "script show/hide" on the Global / Sound box groups
 ```
 
 ### Key decisions

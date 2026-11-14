@@ -24,7 +24,7 @@ OUT = os.path.normpath(os.path.join(HERE, "..", "device"))
 
 POOL = "---mkpool"          # '---' is replaced by a per-device-instance id in Live
 VOICES = 32
-DEVICE_WIDTH = 650
+DEVICE_WIDTH = 720
 
 
 class Patcher:
@@ -73,6 +73,14 @@ class Patcher:
         return self.add("comment", rect=rect, pres=pres, text=text,
                         numinlets=1, numoutlets=0, **attrs)
 
+    def name(self, oid, varname):
+        for b in self.boxes:
+            if b["box"]["id"] == oid:
+                cur = b["box"].get("varname", varname)
+                b["box"]["varname"] = "".join(c for c in cur if c.isalnum() or c == "_")
+                return b["box"]["varname"]
+        raise KeyError(oid)
+
     def wire(self, src, outlet, dst, inlet=0):
         self.lines.append({"patchline": {"source": [src, outlet],
                                          "destination": [dst, inlet]}})
@@ -98,7 +106,8 @@ class Patcher:
 
 
 def live_param(longname, ptype, mmin=0.0, mmax=1.0, initial=0.0, unit=1,
-               exponent=None, enum=None, shortname=None, invisible=None, steps=None):
+               exponent=None, enum=None, shortname=None, invisible=None, steps=None,
+               initial_enable=1):
     v = {
         "parameter_longname": longname,
         "parameter_shortname": shortname or longname,
@@ -106,7 +115,7 @@ def live_param(longname, ptype, mmin=0.0, mmax=1.0, initial=0.0, unit=1,
         "parameter_mmin": mmin,
         "parameter_mmax": mmax,
         "parameter_initial": [initial],
-        "parameter_initial_enable": 1,
+        "parameter_initial_enable": initial_enable,
         "parameter_unitstyle": unit,      # 0 int, 1 float, 2 ms, 4 dB, 5 %, 7 st
     }
     if exponent is not None:
@@ -284,12 +293,16 @@ def build_voice():
 def build_main():
     m = Patcher()
 
-    # ---------- presentation: labels ----------
-    m.comment("multiKey", pres=[8, 4, 120, 22], fontsize=16.0, fontface=1)
-    m.comment("v0.3.1", pres=[100, 9, 40, 16], fontsize=9.0)
-    m.comment("ENVELOPE", pres=[200, 8, 120, 16], fontsize=9.0, fontface=1)
-    m.comment("PLAY", pres=[390, 8, 80, 16], fontsize=9.0, fontface=1)
-    m.comment("RANDOM", pres=[485, 8, 80, 16], fontsize=9.0, fontface=1)
+    # ---------- presentation ----------
+    # left: title, waveform (drop target), sound list, buttons
+    # right: tabs. GLOBAL = all sounds, SOUND = the sound selected in the list
+    G = []   # boxes shown on the Global tab
+    S = []   # boxes shown on the Sound tab
+    m.comment("multiKey", pres=[8, 4, 80, 22], fontsize=16.0, fontface=1)
+    m.comment("v0.4", pres=[84, 9, 30, 16], fontsize=9.0)
+    G.append(m.comment("ENVELOPE", pres=[256, 24, 120, 14], fontsize=9.0, fontface=1))
+    G.append(m.comment("PLAY", pres=[444, 24, 80, 14], fontsize=9.0, fontface=1))
+    G.append(m.comment("RANDOM", pres=[548, 24, 80, 14], fontsize=9.0, fontface=1))
 
     # ---------- MIDI in: raw stream parser ----------
     # [notein]/[xbendin] can report channel 1 for everything in Max for Live, which breaks
@@ -380,14 +393,16 @@ def build_main():
     m.wire(unp, 1, tp)
     semis = m.obj("expr $i1 - 60 + $i2", 2, 1)            # C3 (60) = original pitch
     m.wire(tp, 1, semis)
-    m.wire(semis, 0, pk, 3)
+    snd_add = m.obj("+ 0.", 2, 1, ["float"])              # + per-sound transpose (at pick time)
+    m.wire(semis, 0, snd_add, 1)
+    m.wire(snd_add, 0, pk, 3)
     pstore = m.obj("i", 2, 1, ["int"])
     m.wire(tp, 0, pstore, 1)
 
     # then velocity: pick sample (+ reseed), pan, amp, vel, then fire with pitch
     tv = m.obj("t b i b i b", 1, 5, ["bang", "int", "bang", "int", "bang"])
     m.wire(unp, 0, tv)
-    amp = m.obj(r"expr (1.-$f2) + $f2*pow($f1/127.\, 1.5)", 2, 1)
+    amp = m.obj(r"expr ((1.-$f2) + $f2*pow($f1/127.\, 1.5)) * $f3", 3, 1)  # $f3 = sound gain
     m.wire(tv, 3, amp)
     # spread: random pan per note, scaled by the Spread knob (0..1)
     pan_rand = m.obj("random 10001", 2, 1, ["int"])
@@ -417,7 +432,15 @@ def build_main():
     m.wire(pick, 0, urn)
     plus1 = m.obj("+ 1", 2, 1, ["int"])                   # polybuffer~ is 1-based
     m.wire(urn, 0, plus1)
-    m.wire(plus1, 0, pk, 2)
+    idx_t = m.obj("t i i", 1, 2, ["int", "int"])
+    m.wire(plus1, 0, idx_t)
+    snd_coll = m.obj("coll", 1, 4, ["", "", "", ""])      # index -> gain semitones (filled by js)
+    snd_unp = m.obj("unpack 0. 0.", 1, 2, ["float", "float"])
+    m.wire(idx_t, 1, snd_coll)
+    m.wire(snd_coll, 0, snd_unp)
+    m.wire(snd_unp, 1, snd_add)
+    m.wire(snd_unp, 0, amp, 2)
+    m.wire(idx_t, 0, pk, 2)
     # chord bigger than the pool: start a fresh deal
     refill = m.obj("t b b", 1, 2, ["bang", "bang"])
     m.wire(urn, 1, refill)
@@ -455,7 +478,7 @@ def build_main():
     m.wire(obs, 0, g_play)
 
     # ---------- output ----------
-    gain = m.add("live.gain~", pres=[600, 6, 42, 156], numinlets=2, numoutlets=5,
+    gain = m.add("live.gain~", pres=[668, 6, 44, 156], numinlets=2, numoutlets=5,
                  outlettype=["signal", "signal", "", "float", "list"],
                  parameter_enable=1, varname="Volume", orientation=1,
                  saved_attribute_attributes=live_param("Volume", 0, -70.0, 6.0, 0.0, 4))
@@ -479,13 +502,14 @@ def build_main():
                      saved_attribute_attributes=live_param(name, ptype, mmin, mmax,
                                                            init, unit, exponent))
 
-    d_att = dial("Attack", [195, 24, 44, 48], 0, 0.0, 5000.0, 1.0, 2, 3.0)
-    d_dec = dial("Decay", [240, 24, 44, 48], 0, 1.0, 10000.0, 600.0, 2, 3.0)
-    d_sus = dial("Sustain", [285, 24, 44, 48], 0, 0.0, 100.0, 100.0, 5)
-    d_rel = dial("Release", [330, 24, 44, 48], 0, 1.0, 10000.0, 250.0, 2, 3.0)
-    d_vel = dial("Vel > Vol", [385, 24, 44, 48], 0, 0.0, 100.0, 70.0, 5)
-    d_spr = dial("Spread", [385, 90, 44, 48], 0, 0.0, 100.0, 0.0, 5)
-    d_trn = dial("Transpose", [430, 24, 44, 48], 1, -48.0, 48.0, 0.0, 7)
+    d_att = dial("Attack", [256, 38, 44, 48], 0, 0.0, 5000.0, 1.0, 2, 3.0)
+    d_dec = dial("Decay", [300, 38, 44, 48], 0, 1.0, 10000.0, 600.0, 2, 3.0)
+    d_sus = dial("Sustain", [344, 38, 44, 48], 0, 0.0, 100.0, 100.0, 5)
+    d_rel = dial("Release", [388, 38, 44, 48], 0, 1.0, 10000.0, 250.0, 2, 3.0)
+    d_spr = dial("Spread", [444, 38, 44, 48], 0, 0.0, 100.0, 0.0, 5)
+    d_trn = dial("Transpose", [488, 38, 44, 48], 1, -48.0, 48.0, 0.0, 7)
+    d_vel = dial("Vel > Vol", [444, 100, 44, 48], 0, 0.0, 100.0, 70.0, 5)
+    G.extend([d_att, d_dec, d_sus, d_rel, d_spr, d_trn, d_vel])
 
     for d, name in ((d_att, "attack"), (d_dec, "decay"), (d_rel, "release")):
         p = m.obj("prepend %s" % name, 1, 1)
@@ -505,25 +529,25 @@ def build_main():
     m.wire(d_trn, 0, semis, 1)
 
     # chord window + seed controls
-    m.comment("Chord window", pres=[485, 24, 80, 16], fontsize=9.0)
-    n_win = m.add("live.numbox", pres=[485, 40, 50, 15], numinlets=1, numoutlets=2,
+    G.append(m.comment("Chord window", pres=[548, 38, 80, 14], fontsize=9.0))
+    n_win = m.add("live.numbox", pres=[548, 52, 60, 15], numinlets=1, numoutlets=2,
                   outlettype=["", "float"], parameter_enable=1, varname="Chord Window",
                   saved_attribute_attributes=live_param("Chord Window", 0, 0.0, 100.0,
                                                         30.0, 2))
     m.wire(n_win, 0, window, 1)
 
-    t_seed = m.add("live.text", pres=[485, 66, 50, 16], numinlets=1, numoutlets=2,
+    t_seed = m.add("live.text", pres=[548, 74, 60, 16], numinlets=1, numoutlets=2,
                    outlettype=["", ""], parameter_enable=1, varname="Seed", mode=1,
                    text="Seed", texton="Seed",
                    saved_attribute_attributes=live_param("Seed", 2, 0.0, 1.0, 0.0, 9,
                                                          enum=["off", "on"]))
     m.wire(t_seed, 0, g_seed)
-    n_seed = m.add("live.numbox", pres=[540, 66, 50, 16], numinlets=1, numoutlets=2,
+    n_seed = m.add("live.numbox", pres=[548, 94, 60, 16], numinlets=1, numoutlets=2,
                    outlettype=["", "float"], parameter_enable=1, varname="Seed Value",
                    saved_attribute_attributes=live_param("Seed Value", 0, 1.0, 9999.0,
                                                          1.0, 0, steps=9999))
     m.wire(n_seed, 0, hsh, 1)
-    t_reroll = m.add("live.text", pres=[485, 86, 105, 16], numinlets=1, numoutlets=2,
+    t_reroll = m.add("live.text", pres=[548, 114, 60, 16], numinlets=1, numoutlets=2,
                      outlettype=["", ""], parameter_enable=0, mode=0, text="Re-roll")
     rr_route = m.obj("route bang 1", 1, 3)
     rr_rand = m.obj("random 9999", 2, 1, ["int"])
@@ -533,6 +557,7 @@ def build_main():
     m.wire(rr_route, 1, rr_rand)
     m.wire(rr_rand, 0, rr_plus)
     m.wire(rr_plus, 0, n_seed)
+    G.extend([n_win, t_seed, n_seed, t_reroll])
 
     # ---------- pitch bend / MPE ----------
     # channel 1 = master bend (all notes, normal pitch wheel), channels 2-16 = per-note (MPE)
@@ -550,7 +575,7 @@ def build_main():
     m.wire(master_semis, 0, master_p)
     m.wire(master_p, 0, bendbus)
     nb_unp = m.obj("unpack 0 0", 1, 2, ["int", "int"])    # channel value
-    nb_semis = m.obj("expr ($f1-8192.)/8192.*$f2", 2, 1)
+    nb_semis = m.obj("expr ($f1-8192.)/8192.*48.", 1, 1)   # MPE standard range
     nb_pk = m.obj("pack 0 0.", 2, 1)
     nb_p = m.obj("prepend note", 1, 1)
     m.wire(xb_route, 1, nb_unp)
@@ -560,26 +585,25 @@ def build_main():
     m.wire(nb_pk, 0, nb_p)
     m.wire(nb_p, 0, bendbus)
 
-    m.comment("BEND", pres=[485, 108, 80, 16], fontsize=9.0, fontface=1)
-    m.comment("Wheel", pres=[485, 122, 50, 14], fontsize=9.0)
-    m.comment("MPE", pres=[540, 122, 50, 14], fontsize=9.0)
-    n_pbr = m.add("live.numbox", pres=[485, 136, 50, 15], numinlets=1, numoutlets=2,
+    G.append(m.comment("Wheel range", pres=[488, 100, 60, 14], fontsize=9.0))
+    n_pbr = m.add("live.numbox", pres=[488, 116, 44, 15], numinlets=1, numoutlets=2,
                   outlettype=["", "float"], parameter_enable=1, varname="PB Range",
                   saved_attribute_attributes=live_param("PB Range", 1, 0.0, 48.0, 2.0, 7))
-    n_mper = m.add("live.numbox", pres=[540, 136, 50, 15], numinlets=1, numoutlets=2,
-                   outlettype=["", "float"], parameter_enable=1, varname="MPE Range",
-                   saved_attribute_attributes=live_param("MPE Range", 1, 0.0, 96.0, 48.0, 7))
     m.wire(n_pbr, 0, master_semis, 1)
-    m.wire(n_mper, 0, nb_semis, 1)
+    G.append(n_pbr)
 
     # ---------- sample pool ----------
-    m.add("panel", pres=[8, 28, 176, 60], numinlets=1, numoutlets=0,
-          bgcolor=[0.2, 0.2, 0.2, 1.0], rounded=4, background=1)
-    m.comment("Drop a folder of one-shots here", pres=[16, 50, 170, 16], fontsize=9.0)
-    drop = m.add("dropfile", pres=[8, 28, 176, 60], numinlets=1, numoutlets=2,
-                 outlettype=["", ""])
+    wave = m.add("waveform~", pres=[8, 26, 236, 80], numinlets=5, numoutlets=6,
+                 outlettype=["float", "float", "float", "float", "list", ""],
+                 ignoreclick=1, bgcolor=[0.12, 0.12, 0.12, 1.0],
+                 waveformcolor=[0.55, 0.83, 0.93, 1.0],
+                 selectioncolor=[0.0, 0.0, 0.0, 0.0])
+    drop = m.add("dropfile", pres=[8, 26, 236, 80], numinlets=1, numoutlets=2,
+                 outlettype=["", ""], border=0)      # on top of the waveform
     polybuf = m.obj("polybuffer~ %s" % POOL, 1, 2)
-    loader = m.obj("js multikey_loader.js %s" % POOL, 1, 3)
+    loader = m.obj("js multikey_loader.js %s" % POOL, 1, 6)
+    m.wire(loader, 3, snd_coll)
+    m.wire(loader, 4, wave)
     p_drop = m.obj("prepend drop", 1, 1)
     p_type = m.obj("prepend droptype", 1, 1)
     m.wire(drop, 1, p_type)
@@ -598,15 +622,19 @@ def build_main():
         m.wire(mm, 0, loader)
         return b
 
-    button("Load folder", [8, 92, 80, 16], "loadfolder")
-    button("Add file", [92, 92, 50, 16], "addfile")
-    button("Clear", [146, 92, 38, 16], "clear")
+    button("Load folder", [8, 132, 90, 16], "loadfolder")
+    button("Add file", [102, 132, 70, 16], "addfile")
+    button("Clear", [176, 132, 68, 16], "clear")
 
-    menu = m.add("umenu", pres=[8, 112, 176, 18], numinlets=1, numoutlets=3,
+    menu = m.add("umenu", pres=[8, 110, 236, 18], numinlets=1, numoutlets=3,
                  outlettype=["int", "", ""], items=["(no samples - drop a folder)"])
     m.wire(loader, 1, menu)
+    p_sel = m.obj("prepend select", 1, 1)
+    m.wire(menu, 0, p_sel)
+    m.wire(p_sel, 0, loader)
 
-    countlbl = m.comment("0 samples", pres=[8, 134, 176, 16], fontsize=9.0)
+    countlbl = m.comment("drop a folder on the waveform", pres=[118, 9, 126, 14],
+                         fontsize=9.0, textjustification=2)
     rcount = m.obj("route count", 1, 2)
     m.wire(loader, 0, rcount)
     tcount = m.obj("t i i i", 1, 3, ["int", "int", "int"])
@@ -615,7 +643,7 @@ def build_main():
     gt0 = m.obj("> 0", 2, 1, ["int"])
     m.wire(tcount, 1, gt0)
     m.wire(gt0, 0, gate_n)
-    cfmt = m.obj("sprintf set %ld samples (all assumed C3)", 1, 1)
+    cfmt = m.obj("sprintf set %ld samples", 1, 1)
     m.wire(tcount, 0, cfmt)
     m.wire(cfmt, 0, countlbl)
 
@@ -628,16 +656,76 @@ def build_main():
     m.wire(pattr, 0, p_rest)
     m.wire(p_rest, 0, loader)
 
-    # ---------- init on device load ----------
-    tinit = m.obj("t b b b b b b b b b b b b", 1, 12, ["bang"] * 12)
+    # ---------- Sound tab: settings for the sound selected in the list ----------
+    S.append(m.comment("No sound selected", pres=[256, 26, 300, 16], fontsize=11.0, fontface=1))
+    snd_name = S[-1]
+    S.append(m.comment("Settings for the sound selected in the list on the left. "
+                       "Applies on top of the Global settings.",
+                       pres=[256, 44, 300, 28], fontsize=9.0, linecount=2))
+
+    def snd_dial(longname, short, pres, mmin, mmax, unit, ptype):
+        return m.add("live.dial", pres=pres, numinlets=1, numoutlets=2,
+                     outlettype=["", "float"], parameter_enable=1,
+                     varname="".join(c for c in longname if c.isalnum()),
+                     saved_attribute_attributes=live_param(
+                         longname, ptype, mmin, mmax, 0.0, unit, shortname=short,
+                         invisible=2, initial_enable=0))   # hidden: values live in js
+    d_svol = snd_dial("Sound Volume", "Volume", [256, 78, 44, 48], -36.0, 12.0, 4, 0)
+    d_strn = snd_dial("Sound Transpose", "Transpose", [304, 78, 44, 48], -24.0, 24.0, 7, 1)
+    t_sreset = m.add("live.text", pres=[360, 94, 60, 16], numinlets=1, numoutlets=2,
+                     outlettype=["", ""], parameter_enable=0, mode=0, text="Reset")
+    S.extend([d_svol, d_strn, t_sreset])
+    p_svol = m.obj("prepend soundvol", 1, 1)
+    p_strn = m.obj("prepend soundtrn", 1, 1)
+    m.wire(d_svol, 0, p_svol)
+    m.wire(d_strn, 0, p_strn)
+    m.wire(p_svol, 0, loader)
+    m.wire(p_strn, 0, loader)
+    sr_route = m.obj("route bang 1", 1, 3)
+    sr_msg = m.msg("soundreset")
+    m.wire(t_sreset, 0, sr_route)
+    m.wire(sr_route, 0, sr_msg)
+    m.wire(sr_route, 1, sr_msg)
+    m.wire(sr_msg, 0, loader)
+    ui_route = m.obj("route name vol trn", 1, 4)
+    m.wire(loader, 5, ui_route)
+    m.wire(ui_route, 0, snd_name)
+    m.wire(ui_route, 1, d_svol)
+    m.wire(ui_route, 2, d_strn)
+
+    # ---------- tabs ----------
+    tab = m.add("live.tab", pres=[256, 4, 140, 16], numinlets=1, numoutlets=3,
+                outlettype=["", "", "float"], parameter_enable=1, varname="Tab",
+                num_lines_patching=1, num_lines_presentation=1,
+                saved_attribute_attributes=live_param("Tab", 2, 0.0, 1.0, 0.0, 9,
+                                                      enum=["Global", "Sound"],
+                                                      invisible=1))
+    gnames = [m.name(o, "g_%s" % o.replace("-", "")) for o in G]
+    snames = [m.name(o, "s_%s" % o.replace("-", "")) for o in S]
+    show_global = m.msg(", ".join(["script show %s" % n for n in gnames] +
+                                  ["script hide %s" % n for n in snames]))
+    show_sound = m.msg(", ".join(["script hide %s" % n for n in gnames] +
+                                 ["script show %s" % n for n in snames]))
+    tab_sel = m.obj("sel 0 1", 3, 3, ["bang", "bang", ""])
+    tp_this = m.obj("thispatcher", 1, 2, ["", ""])
+    m.wire(tab, 0, tab_sel)
+    m.wire(tab_sel, 0, show_global)
+    m.wire(tab_sel, 1, show_sound)
+    m.wire(show_global, 0, tp_this)
+    m.wire(show_sound, 0, tp_this)
+
+    # ---------- init on device load (right to left) ----------
+    init_targets = [tab, "init", d_att, d_dec, d_sus, d_rel, d_vel, d_trn, d_spr, n_pbr,
+                    "path", "prop"]
+    n = len(init_targets)
+    tinit = m.obj("t " + " ".join(["b"] * n), 1, n, ["bang"] * n)
     m.wire(thisdev, 0, tinit)
     initmsg = m.msg("init")
-    m.wire(tinit, 11, initmsg)
     m.wire(initmsg, 0, loader)
-    for i, d in enumerate((d_att, d_dec, d_sus, d_rel, d_vel, d_trn, d_spr, n_pbr, n_mper)):
-        m.wire(tinit, 10 - i, d)
-    m.wire(tinit, 1, pathmsg)
-    m.wire(tinit, 0, propmsg)
+    for i, t in enumerate(init_targets):
+        outlet = n - 1 - i
+        dst = {"init": initmsg, "path": pathmsg, "prop": propmsg}.get(t, t)
+        m.wire(tinit, outlet, dst)
 
     # keep polybuf referenced in layout (it is used by name from js/voices)
     _ = polybuf

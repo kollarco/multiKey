@@ -1,5 +1,13 @@
 # Testing multiKey
 
+## v0.4 checks
+- [ ] Device loads with the new layout; Global tab is shown and the Sound tab controls are hidden
+- [ ] Dropping a folder or file onto the waveform still works
+- [ ] The waveform shows the sound selected in the dropdown
+- [ ] Sound tab: Volume and Transpose change only the selected sound (play notes to check); Reset puts it back
+- [ ] Switching sounds in the dropdown updates the Sound tab values
+- [ ] Save, close and reopen the set: samples and per-sound settings come back
+
 ## v0.3.1 checks
 - [ ] Loading samples no longer crashes
 - [ ] Notes still play normally (the MIDI input was rewritten)
