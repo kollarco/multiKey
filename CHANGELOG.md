@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.6.3, 2026-11-14
+- Fix: Solo button never showed its on state. It lacked a proper on/off parameter definition, so its "on" value was drawn as off. It is now a real on/off toggle (not automated, not saved), in solo blue.
+
 ## v0.6.2, 2026-11-14
 - Fix: Preview button didn't respond. The invisible drop area under it may have taken the click; the drop area now leaves the Preview corner free.
 - Fix: Solo didn't show blue. Live object colours follow the Live theme unless that link is cleared; it now is for the Solo button.

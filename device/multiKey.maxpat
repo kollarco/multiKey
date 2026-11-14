@@ -65,7 +65,7 @@
       34,
       16
      ],
-     "text": "v0.6.2",
+     "text": "v0.6.3",
      "numinlets": 1,
      "numoutlets": 0,
      "fontsize": 9.0
@@ -3564,10 +3564,11 @@
       "",
       ""
      ],
-     "parameter_enable": 0,
+     "parameter_enable": 1,
      "mode": 1,
      "text": "Solo",
      "texton": "Solo",
+     "varname": "SoloBtn",
      "activebgoncolor": [
       0.33,
       0.62,
@@ -3593,6 +3594,23 @@
       1.0
      ],
      "saved_attribute_attributes": {
+      "valueof": {
+       "parameter_longname": "Solo",
+       "parameter_shortname": "Solo",
+       "parameter_type": 2,
+       "parameter_mmin": 0.0,
+       "parameter_mmax": 1.0,
+       "parameter_initial": [
+        0.0
+       ],
+       "parameter_initial_enable": 0,
+       "parameter_unitstyle": 9,
+       "parameter_enum": [
+        "off",
+        "on"
+       ],
+       "parameter_invisible": 2
+      },
       "activebgoncolor": {
        "expression": ""
       },
@@ -3605,8 +3623,7 @@
       "textoncolor": {
        "expression": ""
       }
-     },
-     "varname": "s_obj162"
+     }
     }
    },
    {
@@ -4458,7 +4475,7 @@
       120,
       22
      ],
-     "text": "script show g_obj3, script show g_obj4, script show g_obj5, script show Attack, script show Decay, script show Sustain, script show Release, script show Spread, script show Transpose, script show VelVol, script show g_obj110, script show ChordWindow, script show Seed, script show SeedValue, script show g_obj114, script show g_obj128, script show PBRange, script hide s_obj157, script hide s_obj158, script hide SoundVolume, script hide SoundTranspose, script hide s_obj162, script hide s_obj163, script hide Zones, script hide Crossfade, script hide z_obj174, script hide z_obj175, script hide z_obj178, script hide z_obj179, script hide z_obj180, script hide z_obj181, script hide z_obj182, script hide z_obj183, script hide zxf1, script hide zxf2, script hide z_obj186, script hide z_obj187, script hide z_obj188, script hide z_obj189",
+     "text": "script show g_obj3, script show g_obj4, script show g_obj5, script show Attack, script show Decay, script show Sustain, script show Release, script show Spread, script show Transpose, script show VelVol, script show g_obj110, script show ChordWindow, script show Seed, script show SeedValue, script show g_obj114, script show g_obj128, script show PBRange, script hide s_obj157, script hide s_obj158, script hide SoundVolume, script hide SoundTranspose, script hide SoloBtn, script hide s_obj163, script hide Zones, script hide Crossfade, script hide z_obj174, script hide z_obj175, script hide z_obj178, script hide z_obj179, script hide z_obj180, script hide z_obj181, script hide z_obj182, script hide z_obj183, script hide zxf1, script hide zxf2, script hide z_obj186, script hide z_obj187, script hide z_obj188, script hide z_obj189",
      "numinlets": 2,
      "numoutlets": 1,
      "outlettype": [
@@ -4476,7 +4493,7 @@
       120,
       22
      ],
-     "text": "script hide g_obj3, script hide g_obj4, script hide g_obj5, script hide Attack, script hide Decay, script hide Sustain, script hide Release, script hide Spread, script hide Transpose, script hide VelVol, script hide g_obj110, script hide ChordWindow, script hide Seed, script hide SeedValue, script hide g_obj114, script hide g_obj128, script hide PBRange, script show s_obj157, script show s_obj158, script show SoundVolume, script show SoundTranspose, script show s_obj162, script show s_obj163, script hide Zones, script hide Crossfade, script hide z_obj174, script hide z_obj175, script hide z_obj178, script hide z_obj179, script hide z_obj180, script hide z_obj181, script hide z_obj182, script hide z_obj183, script hide zxf1, script hide zxf2, script hide z_obj186, script hide z_obj187, script hide z_obj188, script hide z_obj189",
+     "text": "script hide g_obj3, script hide g_obj4, script hide g_obj5, script hide Attack, script hide Decay, script hide Sustain, script hide Release, script hide Spread, script hide Transpose, script hide VelVol, script hide g_obj110, script hide ChordWindow, script hide Seed, script hide SeedValue, script hide g_obj114, script hide g_obj128, script hide PBRange, script show s_obj157, script show s_obj158, script show SoundVolume, script show SoundTranspose, script show SoloBtn, script show s_obj163, script hide Zones, script hide Crossfade, script hide z_obj174, script hide z_obj175, script hide z_obj178, script hide z_obj179, script hide z_obj180, script hide z_obj181, script hide z_obj182, script hide z_obj183, script hide zxf1, script hide zxf2, script hide z_obj186, script hide z_obj187, script hide z_obj188, script hide z_obj189",
      "numinlets": 2,
      "numoutlets": 1,
      "outlettype": [
@@ -4494,7 +4511,7 @@
       120,
       22
      ],
-     "text": "script hide g_obj3, script hide g_obj4, script hide g_obj5, script hide Attack, script hide Decay, script hide Sustain, script hide Release, script hide Spread, script hide Transpose, script hide VelVol, script hide g_obj110, script hide ChordWindow, script hide Seed, script hide SeedValue, script hide g_obj114, script hide g_obj128, script hide PBRange, script hide s_obj157, script hide s_obj158, script hide SoundVolume, script hide SoundTranspose, script hide s_obj162, script hide s_obj163, script show Zones, script show Crossfade, script show z_obj174, script show z_obj175, script show z_obj178, script show z_obj179, script show z_obj180, script show z_obj181, script show z_obj182, script show z_obj183, script show zxf1, script show zxf2, script show z_obj186, script show z_obj187, script show z_obj188, script show z_obj189",
+     "text": "script hide g_obj3, script hide g_obj4, script hide g_obj5, script hide Attack, script hide Decay, script hide Sustain, script hide Release, script hide Spread, script hide Transpose, script hide VelVol, script hide g_obj110, script hide ChordWindow, script hide Seed, script hide SeedValue, script hide g_obj114, script hide g_obj128, script hide PBRange, script hide s_obj157, script hide s_obj158, script hide SoundVolume, script hide SoundTranspose, script hide SoloBtn, script hide s_obj163, script show Zones, script show Crossfade, script show z_obj174, script show z_obj175, script show z_obj178, script show z_obj179, script show z_obj180, script show z_obj181, script show z_obj182, script show z_obj183, script show zxf1, script show zxf2, script show z_obj186, script show z_obj187, script show z_obj188, script show z_obj189",
      "numinlets": 2,
      "numoutlets": 1,
      "outlettype": [

@@ -300,7 +300,7 @@ def build_main():
     S = []   # boxes shown on the Sound tab
     Z = []   # boxes shown on the Zones tab
     m.comment("multiKey", pres=[8, 4, 80, 22], fontsize=16.0, fontface=1)
-    m.comment("v0.6.2", pres=[84, 9, 34, 16], fontsize=9.0)
+    m.comment("v0.6.3", pres=[84, 9, 34, 16], fontsize=9.0)
     G.append(m.comment("ENVELOPE", pres=[256, 24, 120, 14], fontsize=9.0, fontface=1))
     G.append(m.comment("PLAY", pres=[444, 24, 80, 14], fontsize=9.0, fontface=1))
     G.append(m.comment("RANDOM", pres=[548, 24, 80, 14], fontsize=9.0, fontface=1))
@@ -734,13 +734,19 @@ def build_main():
     t_prev = m.add("live.text", pres=[191, 28, 51, 15], numinlets=1, numoutlets=2,
                    outlettype=["", ""], parameter_enable=0, mode=0, text="Preview")
     t_solo = m.add("live.text", pres=[360, 82, 60, 16], numinlets=1, numoutlets=2,
-                   outlettype=["", ""], parameter_enable=0, mode=1, text="Solo", texton="Solo",
+                   outlettype=["", ""], parameter_enable=1, mode=1, text="Solo", texton="Solo",
+                   varname="SoloBtn",
                    # Live's solo blue. Colours of live.* objects follow the Live theme unless
                    # their theme link ("expression") is cleared.
                    activebgoncolor=[0.33, 0.62, 0.92, 1.0], bgoncolor=[0.33, 0.62, 0.92, 1.0],
                    activetextoncolor=[0.0, 0.0, 0.0, 1.0], textoncolor=[0.0, 0.0, 0.0, 1.0],
-                   saved_attribute_attributes={k: {"expression": ""} for k in (
-                       "activebgoncolor", "bgoncolor", "activetextoncolor", "textoncolor")})
+                   # A live.text toggle needs a real on/off (enum) parameter definition.
+                   # Without it the value range defaults to 0-127, so "1" still draws as off.
+                   saved_attribute_attributes=dict(
+                       live_param("Solo", 2, 0.0, 1.0, 0.0, 9, enum=["off", "on"],
+                                  invisible=2, initial_enable=0),
+                       **{k: {"expression": ""} for k in (
+                           "activebgoncolor", "bgoncolor", "activetextoncolor", "textoncolor")}))
     t_sreset = m.add("live.text", pres=[360, 102, 60, 16], numinlets=1, numoutlets=2,
                      outlettype=["", ""], parameter_enable=0, mode=0, text="Reset")
     S.extend([d_svol, d_strn, t_solo, t_sreset])
