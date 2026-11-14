@@ -6,16 +6,17 @@ Built because stacking Simplers in a rack has two problems: swapping samples is 
 
 ## Status
 
-**v0.1, first prototype, untested in Live.** Expect rough edges. See [docs/TESTING.md](docs/TESTING.md) for what to try and what to report.
+**v0.2, early prototype.** Loading and drag-and-drop confirmed working in Live 12. See [docs/TESTING.md](docs/TESTING.md) for what to try and what to report.
 
-## What it does (v0.1)
+## What it does (v0.2)
 
 - **Sample pool:** drop a folder (or use *Load folder*) to load every one-shot in it. *Add file* adds one sample. The sample list is saved with your Live set.
 - **Chromatic playback:** every sample is assumed to be a **C**. C3 (MIDI 60) plays it at its original pitch, and other notes transpose it. A global *Transpose* knob fixes packs that aren't in C.
 - **A random pick per note:** each note draws its own sample, so a clicked-in chord no longer repeats one sample on every note.
 - **Chord dealing:** notes that land within the *Chord window* (default 30 ms) are dealt different samples, like cards from a shuffled deck. A 4-note chord always gets 4 different one-shots if the pool has at least 4.
 - **Seed:** with *Seed* on and Live playing, picks are derived from the song position plus the seed value, so a clip plays the same picks on every playback and bounce. *Re-roll* gives a new set of picks.
-- **Global envelope:** attack, decay, sustain and release, plus velocity sensitivity, a volume fader and 32 voices.
+- **Spread:** a random stereo position per note. At 0% every note is centred; at 100% each note lands anywhere from hard left to hard right.
+- **Global envelope:** attack, decay, sustain and release, plus *Vel > Vol* (how much velocity changes loudness), a volume fader and 32 voices.
 
 ## Repo layout
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2, 2026-11-14
+- New: **Spread** knob, a random pan per note (0% = centre, 100% = anywhere from hard left to hard right). Seeded renders keep their panning.
+- Fix: Re-roll got stuck at 256 (Live caps integer parameters at 256 values). Seed Value is now 1-9999.
+- Fix: output was too hot and distorted with chords; -7 dB trim before the volume fader.
+- "Velocity" knob renamed to **Vel > Vol** (how much note velocity changes loudness).
+
 ## v0.1, 2026-11-14 (first prototype, untested in Live)
 - Sample pool via polybuffer~: folder drop, folder dialog, add file, clear
 - Saves the sample list in the Live set (pattr blob)

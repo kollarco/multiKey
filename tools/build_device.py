@@ -98,7 +98,7 @@ class Patcher:
 
 
 def live_param(longname, ptype, mmin=0.0, mmax=1.0, initial=0.0, unit=1,
-               exponent=None, enum=None, shortname=None, invisible=None):
+               exponent=None, enum=None, shortname=None, invisible=None, steps=None):
     v = {
         "parameter_longname": longname,
         "parameter_shortname": shortname or longname,
@@ -113,6 +113,8 @@ def live_param(longname, ptype, mmin=0.0, mmax=1.0, initial=0.0, unit=1,
         v["parameter_exponent"] = exponent
     if enum is not None:
         v["parameter_enum"] = enum
+    if steps is not None:
+        v["parameter_steps"] = steps
     if invisible is not None:
         v["parameter_invisible"] = invisible
     return {"valueof": v}
@@ -120,16 +122,21 @@ def live_param(longname, ptype, mmin=0.0, mmax=1.0, initial=0.0, unit=1,
 
 # --------------------------------------------------------------------------
 # Voice patcher: one instance per voice inside [poly~]
-# Incoming list (via poly~ "midinote"):  pitch  vel  sampleIndex  semitones  amp
+# Incoming list (via poly~ "midinote"):  pitch  vel  sampleIndex  semitones  amp  pan
 #   note-on : sampleIndex >= 1, plays <pool>.<index> transposed by `semitones`
-#   note-off: "pitch 0 0 0 0" -> envelope release
+#   note-off: "pitch 0 0 0 0 0" -> envelope release
+#   pan: -1 (left) .. 0 (centre) .. 1 (right), applied when the note starts
 # #1 = the pool name, passed with [poly~ ... @args ---mkpool]
 # --------------------------------------------------------------------------
 def build_voice():
     v = Patcher()
     inl = v.obj("in 1", 0, 1)
-    unp = v.obj("unpack 0 0 0 0. 0.", 1, 5, ["int", "int", "int", "float", "float"])
+    unp = v.obj("unpack 0 0 0 0. 0. 0.", 1, 6,
+                ["int", "int", "int", "float", "float", "float"])
     v.wire(inl, 0, unp)
+
+    pan_store = v.obj("f", 2, 1, ["float"])
+    v.wire(unp, 5, pan_store, 1)
 
     amp_store = v.obj("f", 2, 1, ["float"])
     v.wire(unp, 4, amp_store, 1)
@@ -141,17 +148,26 @@ def build_voice():
 
     idx_sel = v.obj("sel 0", 2, 2, ["bang", ""])
     v.wire(unp, 2, idx_sel)
-    start = v.obj("t b b b i", 1, 4, ["bang", "bang", "bang", "int"])
+    start = v.obj("t b b b b i", 1, 5, ["bang", "bang", "bang", "bang", "int"])
     v.wire(idx_sel, 1, start)
 
     setname = v.obj("sprintf set #1.%ld", 1, 1)
-    v.wire(start, 3, setname)
+    v.wire(start, 4, setname)
 
     groove = v.obj("groove~ #1.1 2 @loop 0", 3, 3, ["signal", "signal", "signal"])
     info = v.obj("info~ #1.1", 1, 11, [""] * 11)
     v.wire(setname, 0, groove)
     v.wire(setname, 0, info)
-    v.wire(start, 2, info)          # bang -> report channel count
+    v.wire(start, 3, info)          # bang -> report channel count
+
+    # pan law: centre = full level on both sides, hard left = left only
+    pan_t = v.obj("t f f", 1, 2, ["float", "float"])
+    v.wire(start, 2, pan_store)
+    v.wire(pan_store, 0, pan_t)
+    gain_l = v.obj(r"expr min(1.\, 1.41421*cos(($f1+1.)*0.785398))", 1, 1)
+    gain_r = v.obj(r"expr min(1.\, 1.41421*sin(($f1+1.)*0.785398))", 1, 1)
+    v.wire(pan_t, 1, gain_l)
+    v.wire(pan_t, 0, gain_r)
 
     sig = v.obj("sig~ 1.", 1, 1, ["signal"])
     v.wire(start, 1, rate_store)
@@ -201,12 +217,19 @@ def build_voice():
     v.wire(rsum, 0, envr)
     v.wire(adsr, 0, envr, 1)
 
+    panl = v.obj("*~ 1.", 2, 1, ["signal"])
+    panr = v.obj("*~ 1.", 2, 1, ["signal"])
+    v.wire(envl, 0, panl)
+    v.wire(envr, 0, panr)
+    v.wire(gain_l, 0, panl, 1)
+    v.wire(gain_r, 0, panr, 1)
+
     outl = v.obj("out~ 1", 1, 0)
     outr = v.obj("out~ 2", 1, 0)
-    v.wire(envl, 0, outl)
-    v.wire(envr, 0, outr)
+    v.wire(panl, 0, outl)
+    v.wire(panr, 0, outr)
 
-    v.comment("multiKey voice. #1 = pool name. Input: pitch vel index semitones amp",
+    v.comment("multiKey voice. #1 = pool name. Input: pitch vel index semitones amp pan",
               rect=[400, 10, 400, 20])
     return v
 
@@ -219,7 +242,7 @@ def build_main():
 
     # ---------- presentation: labels ----------
     m.comment("multiKey", pres=[8, 4, 120, 22], fontsize=16.0, fontface=1)
-    m.comment("v0.1", pres=[100, 9, 40, 16], fontsize=9.0)
+    m.comment("v0.2", pres=[100, 9, 40, 16], fontsize=9.0)
     m.comment("ENVELOPE", pres=[200, 8, 120, 16], fontsize=9.0, fontface=1)
     m.comment("PLAY", pres=[390, 8, 80, 16], fontsize=9.0, fontface=1)
     m.comment("RANDOM", pres=[485, 8, 80, 16], fontsize=9.0, fontface=1)
@@ -238,7 +261,7 @@ def build_main():
                  1, 2, ["signal", "signal"])
 
     # note-off: vel 0 -> release whichever voice holds this pitch
-    off = m.msg("midinote $1 0 0 0 0")
+    off = m.msg("midinote $1 0 0 0 0 0")
     m.wire(route0, 0, off)
     m.wire(off, 0, poly)
 
@@ -248,7 +271,7 @@ def build_main():
     unp = m.obj("unpack 0 0", 1, 2, ["int", "int"])      # vel pitch
     m.wire(gate_n, 0, unp)
 
-    pk = m.obj("pack 0 0 0 0. 0.", 5, 1)                  # pitch vel idx semis amp
+    pk = m.obj("pack 0 0 0 0. 0. 0.", 6, 1)               # pitch vel idx semis amp pan
     pre = m.obj("prepend midinote", 1, 1)
     m.wire(pk, 0, pre)
     m.wire(pre, 0, poly)
@@ -262,11 +285,17 @@ def build_main():
     pstore = m.obj("i", 2, 1, ["int"])
     m.wire(tp, 0, pstore, 1)
 
-    # then velocity: amp, pick sample, vel, then fire with pitch
-    tv = m.obj("t b i b i", 1, 4, ["bang", "int", "bang", "int"])
+    # then velocity: pick sample (+ reseed), pan, amp, vel, then fire with pitch
+    tv = m.obj("t b i b i b", 1, 5, ["bang", "int", "bang", "int", "bang"])
     m.wire(unp, 0, tv)
     amp = m.obj(r"expr (1.-$f2) + $f2*pow($f1/127.\, 1.5)", 2, 1)
     m.wire(tv, 3, amp)
+    # spread: random pan per note, scaled by the Spread knob (0..1)
+    pan_rand = m.obj("random 10001", 2, 1, ["int"])
+    pan_scale = m.obj(r"expr ($f1/5000.-1.)*$f2", 2, 1)
+    m.wire(tv, 2, pan_rand)
+    m.wire(pan_rand, 0, pan_scale)
+    m.wire(pan_scale, 0, pk, 5)
     m.wire(amp, 0, pk, 4)
     m.wire(tv, 1, pk, 1)
     m.wire(tv, 0, pstore)
@@ -274,7 +303,7 @@ def build_main():
 
     # ---------- sample picker: per-note random, dealt without repeats within a chord ----------
     pick = m.obj("t b b", 1, 2, ["bang", "bang"])
-    m.wire(tv, 2, pick)
+    m.wire(tv, 4, pick)
     once = m.obj("onebang 1", 2, 2, ["bang", "bang"])     # first note of a chord passes
     m.wire(pick, 1, once)
     chord_open = m.obj("t b b b", 1, 3, ["bang", "bang", "bang"])
@@ -313,6 +342,7 @@ def build_main():
     seedmsg = m.obj("prepend seed", 1, 1)
     m.wire(hsh, 0, seedmsg)
     m.wire(seedmsg, 0, urn)
+    m.wire(seedmsg, 0, pan_rand)                          # seeded renders keep their panning
 
     # Live transport state -> g_play
     thisdev = m.obj("live.thisdevice", 1, 3, ["bang", "int", "int"])
@@ -330,8 +360,12 @@ def build_main():
                  outlettype=["signal", "signal", "", "float", "list"],
                  parameter_enable=1, varname="Volume", orientation=1,
                  saved_attribute_attributes=live_param("Volume", 0, -70.0, 6.0, 0.0, 4))
-    m.wire(poly, 0, gain, 0)
-    m.wire(poly, 1, gain, 1)
+    trim_l = m.obj("*~ 0.447", 2, 1, ["signal"])          # -7 dB headroom
+    trim_r = m.obj("*~ 0.447", 2, 1, ["signal"])
+    m.wire(poly, 0, trim_l)
+    m.wire(poly, 1, trim_r)
+    m.wire(trim_l, 0, gain, 0)
+    m.wire(trim_r, 0, gain, 1)
     plugout = m.obj("plugout~", 2, 2, ["signal", "signal"])
     m.wire(gain, 0, plugout, 0)
     m.wire(gain, 1, plugout, 1)
@@ -341,7 +375,8 @@ def build_main():
 
     def dial(name, pres, ptype, mmin, mmax, init, unit, exponent=None):
         return m.add("live.dial", pres=pres, numinlets=1, numoutlets=2,
-                     outlettype=["", "float"], parameter_enable=1, varname=name,
+                     outlettype=["", "float"], parameter_enable=1,
+                     varname="".join(c for c in name if c.isalnum()),
                      saved_attribute_attributes=live_param(name, ptype, mmin, mmax,
                                                            init, unit, exponent))
 
@@ -349,7 +384,8 @@ def build_main():
     d_dec = dial("Decay", [240, 24, 44, 48], 0, 1.0, 10000.0, 600.0, 2, 3.0)
     d_sus = dial("Sustain", [285, 24, 44, 48], 0, 0.0, 100.0, 100.0, 5)
     d_rel = dial("Release", [330, 24, 44, 48], 0, 1.0, 10000.0, 250.0, 2, 3.0)
-    d_vel = dial("Velocity", [385, 24, 44, 48], 0, 0.0, 100.0, 70.0, 5)
+    d_vel = dial("Vel > Vol", [385, 24, 44, 48], 0, 0.0, 100.0, 70.0, 5)
+    d_spr = dial("Spread", [385, 90, 44, 48], 0, 0.0, 100.0, 0.0, 5)
     d_trn = dial("Transpose", [430, 24, 44, 48], 1, -48.0, 48.0, 0.0, 7)
 
     for d, name in ((d_att, "attack"), (d_dec, "decay"), (d_rel, "release")):
@@ -364,6 +400,9 @@ def build_main():
     vel_scale = m.obj("/ 100.", 2, 1, ["float"])
     m.wire(d_vel, 0, vel_scale)
     m.wire(vel_scale, 0, amp, 1)
+    spr_scale = m.obj("/ 100.", 2, 1, ["float"])
+    m.wire(d_spr, 0, spr_scale)
+    m.wire(spr_scale, 0, pan_scale, 1)
     m.wire(d_trn, 0, semis, 1)
 
     # chord window + seed controls
@@ -382,8 +421,8 @@ def build_main():
     m.wire(t_seed, 0, g_seed)
     n_seed = m.add("live.numbox", pres=[540, 66, 50, 16], numinlets=1, numoutlets=2,
                    outlettype=["", "float"], parameter_enable=1, varname="Seed Value",
-                   saved_attribute_attributes=live_param("Seed Value", 1, 1.0, 9999.0,
-                                                         1.0, 0))
+                   saved_attribute_attributes=live_param("Seed Value", 0, 1.0, 9999.0,
+                                                         1.0, 0, steps=9999))
     m.wire(n_seed, 0, hsh, 1)
     t_reroll = m.add("live.text", pres=[485, 86, 105, 16], numinlets=1, numoutlets=2,
                      outlettype=["", ""], parameter_enable=0, mode=0, text="Re-roll")
@@ -453,13 +492,13 @@ def build_main():
     m.wire(p_rest, 0, loader)
 
     # ---------- init on device load ----------
-    tinit = m.obj("t b b b b b b b b b", 1, 9, ["bang"] * 9)
+    tinit = m.obj("t b b b b b b b b b b", 1, 10, ["bang"] * 10)
     m.wire(thisdev, 0, tinit)
     initmsg = m.msg("init")
-    m.wire(tinit, 8, initmsg)
+    m.wire(tinit, 9, initmsg)
     m.wire(initmsg, 0, loader)
-    for i, d in enumerate((d_att, d_dec, d_sus, d_rel, d_vel, d_trn)):
-        m.wire(tinit, 7 - i, d)
+    for i, d in enumerate((d_att, d_dec, d_sus, d_rel, d_vel, d_trn, d_spr)):
+        m.wire(tinit, 8 - i, d)
     m.wire(tinit, 1, pathmsg)
     m.wire(tinit, 0, propmsg)
 

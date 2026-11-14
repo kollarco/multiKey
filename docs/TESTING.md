@@ -1,4 +1,12 @@
-# Testing multiKey v0.1
+# Testing multiKey
+
+## v0.2 checks
+- [ ] Re-roll gives a new number every click (no longer stuck at 256)
+- [ ] Chords no longer distort at the default volume
+- [ ] Spread at 0%: all notes centred. At 100%: notes land all over the stereo field
+- [ ] Seed on + Spread: same panning on every playback from the same position
+
+## Full checklist (v0.1)
 
 Live 12 Suite, macOS. Report what happens at each step. If something fails, open the Max Console (*Max → Window → Max Console*, or right-click the device title → *Edit*, then Window → Max Console) and copy any red errors.
 

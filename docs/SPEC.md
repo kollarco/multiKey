@@ -25,7 +25,10 @@ Live 12.4's Live API can load samples into Simpler (`SimplerDevice.replace_sampl
 - Global ADSR, velocity sensitivity, volume, 32 voices with voice stealing
 - Sample list saved in the Live set
 
-### Next candidates (pick after testing v0.1)
+### v0.2 (done)
+- Spread (random pan per note), seed fix, -7 dB output trim, "Vel > Vol" naming
+
+### Next candidates
 - One-shot mode (ignore note-off, always play the full sample)
 - No immediate repeats for single notes too (melody lines)
 - Per-slot tuning / root note, and reading the key from filenames (`pluck_F#.wav`)
