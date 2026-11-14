@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.4.1, 2026-11-14
+- Fix: drag and drop onto the waveform stopped working. The waveform display now sits in the background layer, so drops reach the drop target above it.
+
 ## v0.4, 2026-11-14
 - New layout: the sound pool on the left, tabs on the right. The device is now 720 px wide.
 - New: **waveform display** of the selected sound, in place of the drop area (still the drop target for folders and files).

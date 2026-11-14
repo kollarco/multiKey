@@ -62,10 +62,10 @@
      "presentation_rect": [
       84,
       9,
-      30,
+      34,
       16
      ],
-     "text": "v0.4",
+     "text": "v0.4.1",
      "numinlets": 1,
      "numoutlets": 0,
      "fontsize": 9.0
@@ -2358,6 +2358,7 @@
       ""
      ],
      "ignoreclick": 1,
+     "background": 1,
      "bgcolor": [
       0.12,
       0.12,

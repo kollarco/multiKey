@@ -299,7 +299,7 @@ def build_main():
     G = []   # boxes shown on the Global tab
     S = []   # boxes shown on the Sound tab
     m.comment("multiKey", pres=[8, 4, 80, 22], fontsize=16.0, fontface=1)
-    m.comment("v0.4", pres=[84, 9, 30, 16], fontsize=9.0)
+    m.comment("v0.4.1", pres=[84, 9, 34, 16], fontsize=9.0)
     G.append(m.comment("ENVELOPE", pres=[256, 24, 120, 14], fontsize=9.0, fontface=1))
     G.append(m.comment("PLAY", pres=[444, 24, 80, 14], fontsize=9.0, fontface=1))
     G.append(m.comment("RANDOM", pres=[548, 24, 80, 14], fontsize=9.0, fontface=1))
@@ -595,7 +595,8 @@ def build_main():
     # ---------- sample pool ----------
     wave = m.add("waveform~", pres=[8, 26, 236, 80], numinlets=5, numoutlets=6,
                  outlettype=["float", "float", "float", "float", "list", ""],
-                 ignoreclick=1, bgcolor=[0.12, 0.12, 0.12, 1.0],
+                 ignoreclick=1, background=1,       # behind the drop target, like the old panel
+                 bgcolor=[0.12, 0.12, 0.12, 1.0],
                  waveformcolor=[0.55, 0.83, 0.93, 1.0],
                  selectioncolor=[0.0, 0.0, 0.0, 0.0])
     drop = m.add("dropfile", pres=[8, 26, 236, 80], numinlets=1, numoutlets=2,
