@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.7, 2026-11-14
+- Fix: **crashes when dropping several sounds at once.** Every loaded file used to trigger a full wipe and reload of the sample pool, freeing memory that playing voices and the waveform display could still be reading.
+  - Files from one drag are now batched into a single load.
+  - Sample memory is never freed while you work: new sounds are appended, removed ones are just no longer used. The pool is rebuilt compactly only when a saved set loads.
+  - Each sound keeps its own slot for the session; the note path finds it through a slot map.
+- Trade-off: swapping folders many times in one session keeps the old samples in memory until the set is reopened.
+
 ## v0.6.4, 2026-11-14
 - Removed the Reset button (Solo now shows its state, so Reset is no longer needed to leave it).
 - Removed the small second drop area under the Preview button (one drop crashed Live there). Drop onto the main part of the waveform.

@@ -1,5 +1,12 @@
 # Testing multiKey
 
+## v0.7 checks (crash fix)
+- [ ] Drag 10-20 files at once onto the waveform, several times in a row: no crash; all files appear in the list
+- [ ] Same while a MIDI clip is playing notes
+- [ ] Drop a folder, then another folder (replaces): no crash
+- [ ] Zones on: fill each zone, replace a zone while playing: no crash
+- [ ] Save, reopen: everything comes back (pool is rebuilt compactly here)
+
 ## v0.6.1 checks
 - [ ] **Load sounds, save, close, reopen: the sounds are back** (if not, copy any "multiKey:" lines from the Max Console)
 - [ ] Preview button on the waveform's top-right corner works from any tab

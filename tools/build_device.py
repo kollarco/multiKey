@@ -300,7 +300,7 @@ def build_main():
     S = []   # boxes shown on the Sound tab
     Z = []   # boxes shown on the Zones tab
     m.comment("multiKey", pres=[8, 4, 80, 22], fontsize=16.0, fontface=1)
-    m.comment("v0.6.4", pres=[84, 9, 34, 16], fontsize=9.0)
+    m.comment("v0.7", pres=[84, 9, 34, 16], fontsize=9.0)
     G.append(m.comment("ENVELOPE", pres=[256, 24, 120, 14], fontsize=9.0, fontface=1))
     G.append(m.comment("PLAY", pres=[444, 24, 80, 14], fontsize=9.0, fontface=1))
     G.append(m.comment("RANDOM", pres=[548, 24, 80, 14], fontsize=9.0, fontface=1))
@@ -453,10 +453,14 @@ def build_main():
     m.wire(zt, 0, zgate, 1)
 
     # one urn per zone (0 Low, 1 Mid, 2 High, 3 = all sounds when Zones is off).
-    # Each deals without repeats within a chord; its output + the zone's base = buffer index.
+    # Each deals without repeats within a chord. urn output + zone key (z*1000) is looked
+    # up in the slot map (filled by js) to get the sound's buffer index. Buffers keep their
+    # index for the whole session, so loading never reorders or frees them.
     idx_t = m.obj("t i i", 1, 2, ["int", "int"])
-    solo_x = m.obj("expr $i1*($i2==0) + $i2", 2, 1)       # Solo: right inlet = sound index (0 = off)
+    solo_x = m.obj("expr $i1*($i2==0) + $i2", 2, 1)       # Solo: right inlet = buffer index (0 = off)
     m.wire(solo_x, 0, idx_t)
+    slotmap = m.obj("coll", 1, 4, ["", "", "", ""])       # zone*1000 + i -> buffer index
+    m.wire(slotmap, 0, solo_x)
     clr = m.msg("clear")
     m.wire(chord_open, 0, clr)
     urns, bases = [], []
@@ -466,7 +470,7 @@ def build_main():
         m.wire(zgate, z, u)
         m.wire(clr, 0, u)
         m.wire(u, 0, b)
-        m.wire(b, 0, solo_x)
+        m.wire(b, 0, slotmap)
         rf = m.obj("t b b", 1, 2, ["bang", "bang"])       # chord bigger than the zone: new deal
         rc = m.msg("clear")
         m.wire(u, 1, rf)
@@ -640,13 +644,14 @@ def build_main():
                  outlettype=["", ""], border=0)
     polybuf = m.obj("polybuffer~ %s" % POOL, 1, 2)
     m.obj("buffer~ ---mkempty 10", 1, 2, ["float", "bang"])   # blank waveform for empty zones
-    loader = m.obj("js multikey_loader.js %s ---mkempty" % POOL, 1, 8)
+    loader = m.obj("js multikey_loader.js %s ---mkempty" % POOL, 1, 9)
+    m.wire(loader, 8, slotmap)
     m.wire(loader, 7, ztab)
     zr_unp = m.obj("unpack 0 0 0 0 0 0 0 0", 1, 8, ["int"] * 8)
     m.wire(loader, 6, zr_unp)
     for z in range(4):
         m.wire(zr_unp, z, urns[z], 1)                     # zone size -> urn range
-        m.wire(zr_unp, 4 + z, bases[z], 1)                # zone base index
+        m.wire(zr_unp, 4 + z, bases[z], 1)                # zone key (z*1000) for the slot map
     m.wire(loader, 3, snd_coll)
     m.wire(loader, 4, wave)
     p_drop = m.obj("prepend drop", 1, 1)

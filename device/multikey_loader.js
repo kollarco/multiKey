@@ -6,16 +6,23 @@
 // dealing, voice allocation) is native Max objects in the main patcher; this script
 // feeds it lookup tables ([coll]s) and urn ranges.
 //
-// Sounds are kept in one polybuffer~, ordered by zone (Low, Mid, High), so each zone
-// is a contiguous block of buffer indices: zone z = base[z] .. base[z] + count[z] - 1.
+// CRASH SAFETY (v0.7): buffers in the polybuffer~ are never freed while you work.
+// New sounds are appended; removed sounds just stop being referenced ("orphans").
+// Freeing buffers that a playing voice or the waveform display still reads from was
+// the likely cause of crashes when dropping many files. The pool is only rebuilt
+// compactly when a saved set is restored on load. Several dropped files are also
+// batched into one load instead of one full reload per file.
+//
+// Each sound has its own buffer index (`buf`). The note path finds it through a
+// slot map: key = zone*1000 + position-in-zone  ->  buffer index.
 //
 // Inlet 0 messages:
-//   droptype <type> / drop <path>   file or folder dropped on the waveform
+//   droptype <type> / drop <path>   file or folder dropped on the waveform (batched)
 //   loadfolderpath <path>           folder chosen with the Load folder dialog
 //   addfile                         file dialog, adds one sample to the current zone
 //   clear                           clear the current zone (Zones on) or everything (off)
 //   select <i>                      sound chosen in the menu (index into the visible list)
-//   soundvol <dB> / soundtrn <st> / soundreset   settings of the selected sound (reset also ends Solo)
+//   soundvol <dB> / soundtrn <st>   settings of the selected sound
 //   zones <0|1>                     Zones off / on
 //   zone <0|1|2>                    zone shown in the list and targeted by loading
 //   xfade <semitones>               zone crossfade width
@@ -28,16 +35,17 @@
 //   0: count <n>                    total number of samples (gates note-ons)
 //   1: umenu                        clear / append <name> / set <i>
 //   2: pattr                        3 path zone dB st ...  (echo is ignored by restore)
-//   3: per-sound coll               clear / <index> <gain> <semitones>
+//   3: per-sound coll               clear / <buffer index> <gain> <semitones>
 //   4: waveform~                    set <buffer name>   (blank buffer when nothing is selected)
 //   5: UI                           name|vol|trn|label set ... / tp <thispatcher message>
-//                                   solo <index or 0> / preview midinote ...
-//   6: zone ranges                  c0 c1 c2 total base0 base1 base2 baseAll
+//                                   solo <buffer index or 0> / solobtn set <0|1> / preview midinote ...
+//   6: zone ranges                  c0 c1 c2 total key0 key1 key2 keyAll
 //   7: zone table coll              clear / <pitch> <zone> <neighbour> <probability>
+//   8: slot map coll                clear / <zone*1000 + i> <buffer index>
 
 autowatch = 1;
 inlets = 1;
-outlets = 8;
+outlets = 9;
 
 setinletassist(0, "commands");
 setoutletassist(0, "count <n>");
@@ -46,8 +54,9 @@ setoutletassist(2, "to pattr (storage)");
 setoutletassist(3, "to per-sound coll");
 setoutletassist(4, "to waveform~");
 setoutletassist(5, "to UI router");
-setoutletassist(6, "zone counts / index bases");
+setoutletassist(6, "zone counts / slot keys");
 setoutletassist(7, "to zone table coll");
+setoutletassist(8, "to slot map coll");
 
 var POOL = (jsarguments.length > 1) ? String(jsarguments[1]) : "mkpool";
 var EMPTY = (jsarguments.length > 2) ? String(jsarguments[2]) : "mkempty";   // blank buffer for the waveform
@@ -57,15 +66,18 @@ var ZONE_OCTAVE = [12, 0, -12];   // Low an octave up (bass samples are recorded
 var BORDER1 = 47.5;               // between B1 (47) and C2 (48)
 var BORDER2 = 71.5;               // between B3 (71) and C4 (72)
 var AUDIO_RE = /\.(wav|wave|aif|aiff|flac|mp3|m4a|ogg|caf)$/i;
+var DROP_BATCH_MS = 150;          // collect every file of one drag before loading
 
 // keyboard picture on the Zones tab: C0 (24) .. C6 (96) across 400 px
 var KB_X = 256, KB_W = 400, KB_LO = 24, KB_HI = 96, XF_Y = 96, XF_H = 34;
 
 var pb = null;
 var dropType = "";
+var pendingDrops = [];
+var dropTask = null;
 var lastStored = null;
-var sounds = [];                  // [{path, zone, vol, trn}], kept ordered by zone
-var selected = -1;                // index into sounds (= buffer index - 1)
+var sounds = [];                  // [{path, zone, vol, trn, buf}], display order: by zone
+var sel = null;                   // selected sound object (or null)
 var ready = false;
 var zonesOn = false;
 var currentZone = 1;
@@ -89,6 +101,56 @@ function clamp(v, lo, hi) {
     return Math.max(lo, Math.min(hi, v));
 }
 
+// Raw rows of the polybuffer: [index, name, path, duration, channels, sr]
+function poolRows() {
+    var rows = [];
+    var d;
+    try {
+        d = pool().dump();
+    } catch (e) {
+        return rows;
+    }
+    if (!d || !d.length) {
+        return rows;
+    }
+    var i;
+    if (d[0] instanceof Array) {
+        return d;
+    }
+    for (i = 0; i + 5 < d.length; i += 6) {
+        rows.push(d.slice(i, i + 6));
+    }
+    return rows;
+}
+
+function poolCount() {
+    var c = pool().count;
+    return (typeof c === "number") ? c : poolRows().length;
+}
+
+// Append one file; returns its buffer index (1-based) or -1.
+function appendBuf(path) {
+    var before = poolCount();
+    try {
+        pool().append(path);
+    } catch (e) {
+        post("multiKey: could not load " + path + "\n");
+        return -1;
+    }
+    var after = poolCount();
+    if (after > before) {
+        return after;
+    }
+    post("multiKey: could not load " + path + "\n");
+    return -1;
+}
+
+function durationOfBuf(buf) {
+    var rows = poolRows();
+    var r = rows[buf - 1];
+    return r ? (Number(r[3]) || 2000) : 2000;
+}
+
 function sortByZone() {
     var i;
     for (i = 0; i < sounds.length; i++) {
@@ -99,68 +161,31 @@ function sortByZone() {
     });
 }
 
-// Indices (into sounds) shown in the menu.
+// Sounds shown in the menu.
 function visible() {
     var out = [];
     var i;
     for (i = 0; i < sounds.length; i++) {
         if (!zonesOn || sounds[i].zone === currentZone) {
-            out.push(i);
+            out.push(sounds[i]);
+        }
+    }
+    return out;
+}
+
+function inZone(z) {
+    var out = [];
+    var i;
+    for (i = 0; i < sounds.length; i++) {
+        if (sounds[i].zone === z) {
+            out.push(sounds[i]);
         }
     }
     return out;
 }
 
 function counts() {
-    var c = [0, 0, 0];
-    var i;
-    for (i = 0; i < sounds.length; i++) {
-        c[sounds[i].zone]++;
-    }
-    return c;
-}
-
-// Paths currently in the polybuffer (used after a dialog append).
-function poolPaths() {
-    var paths = [];
-    var d;
-    try {
-        d = pool().dump();
-    } catch (e) {
-        return paths;
-    }
-    if (!d || !d.length) {
-        return paths;
-    }
-    var i;
-    if (d[0] instanceof Array) {
-        for (i = 0; i < d.length; i++) {
-            paths.push(String(d[i][2]));
-        }
-    } else {
-        for (i = 0; i + 2 < d.length; i += 6) {
-            paths.push(String(d[i + 2]));
-        }
-    }
-    return paths;
-}
-
-function durationOf(i) {
-    var d;
-    try {
-        d = pool().dump();
-    } catch (e) {
-        return 2000;
-    }
-    if (d && d.length && d[0] instanceof Array) {
-        return d[i] ? Number(d[i][3]) || 2000 : 2000;
-    }
-    return d && d.length > i * 6 + 3 ? Number(d[i * 6 + 3]) || 2000 : 2000;
-}
-
-function sendSolo() {
-    outlet(5, "solo", (soloOn && selected >= 0) ? selected + 1 : 0);
-    outlet(5, "solobtn", "set", soloOn ? 1 : 0);
+    return [inZone(0).length, inZone(1).length, inZone(2).length];
 }
 
 function folderFiles(path) {
@@ -205,16 +230,28 @@ function store() {
     outlet(2, data);
 }
 
-function sendCollRow(i) {
-    var s = sounds[i];
+function sendCollRow(s) {
     var semis = s.trn + (zonesOn ? ZONE_OCTAVE[s.zone] : 0);
-    outlet(3, i + 1, Math.pow(10, s.vol / 20), semis);
+    outlet(3, s.buf, Math.pow(10, s.vol / 20), semis);
 }
 
 function sendZoneRanges() {
     var c = counts();
-    outlet(6, c[0], c[1], c[2], sounds.length,
-           1, 1 + c[0], 1 + c[0] + c[1], 1);
+    outlet(6, c[0], c[1], c[2], sounds.length, 0, 1000, 2000, 3000);
+}
+
+function sendSlotMap() {
+    var z, i, list;
+    outlet(8, "clear");
+    for (z = 0; z < 3; z++) {
+        list = inZone(z);
+        for (i = 0; i < list.length; i++) {
+            outlet(8, z * 1000 + i, list[i].buf);
+        }
+    }
+    for (i = 0; i < sounds.length; i++) {
+        outlet(8, 3000 + i, sounds[i].buf);        // "all sounds" (Zones off)
+    }
 }
 
 // For every MIDI pitch: own zone, neighbour zone, chance of picking the neighbour.
@@ -276,18 +313,22 @@ function sendZoneVisual() {
     outlet(5, "tp", "script", zonesOn ? "show" : "hide", "zonesel");
 }
 
+function sendSolo() {
+    outlet(5, "solo", (soloOn && sel) ? sel.buf : 0);
+    outlet(5, "solobtn", "set", soloOn ? 1 : 0);
+}
+
 function sendSoundUI() {
-    if (selected < 0 || selected >= sounds.length) {
+    if (!sel) {
         outlet(5, "name", "set", "No sound selected");
         outlet(5, "vol", "set", 0);
         outlet(5, "trn", "set", 0);
         return;
     }
-    var s = sounds[selected];
-    var pos = visible().indexOf(selected) + 1;
-    outlet(5, "name", "set", (zonesOn ? ZONE_NAMES[s.zone] + " " : "") + pos + ": " + basename(s.path));
-    outlet(5, "vol", "set", s.vol);
-    outlet(5, "trn", "set", s.trn);
+    var pos = visible().indexOf(sel) + 1;
+    outlet(5, "name", "set", (zonesOn ? ZONE_NAMES[sel.zone] + " " : "") + pos + ": " + basename(sel.path));
+    outlet(5, "vol", "set", sel.vol);
+    outlet(5, "trn", "set", sel.trn);
 }
 
 function sendLabel() {
@@ -302,26 +343,28 @@ function sendLabel() {
     }
 }
 
+function showWaveform() {
+    outlet(4, "set", sel ? POOL + "." + sel.buf : EMPTY);
+}
+
 function showMenu() {
     var vis = visible();
     var i;
     outlet(1, "clear");
     for (i = 0; i < vis.length; i++) {
-        outlet(1, "append", (i + 1) + ": " + basename(sounds[vis[i]].path));
+        outlet(1, "append", (i + 1) + ": " + basename(vis[i].path));
     }
     if (vis.length === 0) {
         outlet(1, "append", zonesOn ? "(" + ZONE_NAMES[currentZone] + " zone empty)"
                                     : "(no samples - drop a folder)");
     }
-    if (vis.indexOf(selected) === -1) {   // keep the selection inside the visible list
-        selected = vis.length > 0 ? vis[0] : -1;
+    if (vis.indexOf(sel) === -1) {        // keep the selection inside the visible list
+        sel = vis.length > 0 ? vis[0] : null;
     }
-    if (selected >= 0) {
-        outlet(1, "set", vis.indexOf(selected));
-        outlet(4, "set", POOL + "." + (selected + 1));
-    } else {
-        outlet(4, "set", EMPTY);             // nothing in this zone: blank waveform
+    if (sel) {
+        outlet(1, "set", vis.indexOf(sel));
     }
+    showWaveform();
     sendSoundUI();
     sendSolo();
 }
@@ -329,10 +372,12 @@ function showMenu() {
 // Push everything to the patcher. Call after any change to sounds/zones.
 function refresh(doStore) {
     var i;
+    sortByZone();
     outlet(3, "clear");
     for (i = 0; i < sounds.length; i++) {
-        sendCollRow(i);
+        sendCollRow(sounds[i]);
     }
+    sendSlotMap();
     sendZoneRanges();
     sendZoneTable();
     showMenu();
@@ -344,34 +389,20 @@ function refresh(doStore) {
     outlet(0, "count", sounds.length);
 }
 
-// Reload the polybuffer from `sounds`, ordered by zone.
-function rebuild(selectPath) {
-    sortByZone();
-    pool().clear();
-    var i;
-    var keep = [];
-    for (i = 0; i < sounds.length; i++) {
-        try {
-            pool().append(sounds[i].path);
-            keep.push(sounds[i]);
-        } catch (e) {
-            post("multiKey: could not load " + sounds[i].path + "\n");
+function newSounds(files, zone) {
+    var out = [];
+    var i, buf;
+    for (i = 0; i < files.length; i++) {
+        buf = appendBuf(files[i]);
+        if (buf > 0) {
+            out.push({ path: files[i], zone: zone, vol: 0, trn: 0, buf: buf });
         }
     }
-    sounds = keep;
-    selected = -1;
-    if (selectPath) {
-        for (i = 0; i < sounds.length; i++) {
-            if (sounds[i].path === selectPath) {
-                selected = i;
-                break;
-            }
-        }
-    }
-    refresh(true);
+    return out;
 }
 
 // Replace the current zone (Zones on) or everything (Zones off) with these files.
+// Old buffers are left in the pool, unreferenced (freeing them could crash a voice).
 function replaceWith(files) {
     var kept = [];
     var i;
@@ -382,19 +413,19 @@ function replaceWith(files) {
             }
         }
     }
-    for (i = 0; i < files.length; i++) {
-        kept.push({ path: files[i], zone: currentZone, vol: 0, trn: 0 });
-    }
-    sounds = kept;
-    rebuild(files.length ? files[0] : null);
+    var added = newSounds(files, currentZone);
+    sounds = kept.concat(added);
+    sel = added.length ? added[0] : null;
+    refresh(true);
 }
 
 function addFiles(files) {
-    var i;
-    for (i = 0; i < files.length; i++) {
-        sounds.push({ path: files[i], zone: currentZone, vol: 0, trn: 0 });
+    var added = newSounds(files, currentZone);
+    sounds = sounds.concat(added);
+    if (added.length) {
+        sel = added[added.length - 1];
     }
-    rebuild(files.length ? files[files.length - 1] : null);
+    refresh(true);
 }
 
 // ---------- messages ----------
@@ -405,12 +436,35 @@ function droptype(t) {
 
 function drop() {
     var path = arrayfromargs(arguments).join(" ");
-    var isFolder = (dropType === "fold") || /[\/:]$/.test(path);
+    pendingDrops.push({ path: path, folder: (dropType === "fold") || /[\/:]$/.test(path) });
     dropType = "";
-    if (isFolder) {
-        replaceWith(folderFiles(path));
-    } else {
-        addFiles([path]);
+    if (dropTask === null) {
+        dropTask = new Task(processDrops, this);
+    }
+    dropTask.cancel();
+    dropTask.schedule(DROP_BATCH_MS);
+}
+
+// One load for everything dropped in one drag. A folder in the drop replaces the
+// zone; loose files only are added.
+function processDrops() {
+    var items = pendingDrops;
+    pendingDrops = [];
+    var files = [];
+    var anyFolder = false;
+    var i;
+    for (i = 0; i < items.length; i++) {
+        if (items[i].folder) {
+            anyFolder = true;
+            files = files.concat(folderFiles(items[i].path));
+        } else if (AUDIO_RE.test(items[i].path)) {
+            files.push(items[i].path);
+        }
+    }
+    if (anyFolder) {
+        replaceWith(files);
+    } else if (files.length) {
+        addFiles(files);
     }
 }
 
@@ -419,11 +473,15 @@ function loadfolderpath() {
 }
 
 function addfile() {
-    var before = poolPaths().length;
+    var before = poolCount();
     pool().append();                      // no argument -> file dialog
-    var paths = poolPaths();
-    if (paths.length > before) {
-        addFiles([paths[paths.length - 1]]);
+    var after = poolCount();
+    if (after > before) {
+        var row = poolRows()[after - 1];
+        var s = { path: row ? String(row[2]) : "", zone: currentZone, vol: 0, trn: 0, buf: after };
+        sounds.push(s);
+        sel = s;
+        refresh(true);
     }
 }
 
@@ -432,7 +490,8 @@ function clear() {
         replaceWith([]);
     } else {
         sounds = [];
-        rebuild(null);
+        sel = null;
+        refresh(true);
     }
 }
 
@@ -442,8 +501,8 @@ function select(i) {
     if (i < 0 || i >= vis.length) {
         return;
     }
-    selected = vis[i];
-    outlet(4, "set", POOL + "." + (selected + 1));
+    sel = vis[i];
+    showWaveform();
     sendSoundUI();
     sendSolo();
 }
@@ -453,20 +512,19 @@ function stopPreview() {
 }
 
 function preview() {
-    if (selected < 0 || selected >= sounds.length) {
+    if (!sel) {
         post("multiKey: preview - no sound selected\n");
         return;
     }
-    var s = sounds[selected];
     if (previewTask !== null) {
         previewTask.cancel();
         stopPreview();
     }
     // original pitch + this sound's own Transpose and Volume (no zone octave, no velocity)
-    outlet(5, "preview", "midinote", PREVIEW_PITCH, 127, selected + 1, s.trn,
-           0.8 * Math.pow(10, s.vol / 20), 0, 1);
+    outlet(5, "preview", "midinote", PREVIEW_PITCH, 127, sel.buf, sel.trn,
+           0.8 * Math.pow(10, sel.vol / 20), 0, 1);
     previewTask = new Task(stopPreview, this);
-    previewTask.schedule(durationOf(selected));
+    previewTask.schedule(durationOfBuf(sel.buf));
 }
 
 function solo(v) {
@@ -476,35 +534,21 @@ function solo(v) {
 }
 
 function soundvol(v) {
-    if (!ready || selected < 0 || selected >= sounds.length) {
+    if (!ready || !sel) {
         return;
     }
-    sounds[selected].vol = clamp(v, -36, 12);
-    sendCollRow(selected);
+    sel.vol = clamp(v, -36, 12);
+    sendCollRow(sel);
     store();
 }
 
 function soundtrn(v) {
-    if (!ready || selected < 0 || selected >= sounds.length) {
+    if (!ready || !sel) {
         return;
     }
-    sounds[selected].trn = Math.round(clamp(v, -24, 24));
-    sendCollRow(selected);
+    sel.trn = Math.round(clamp(v, -24, 24));
+    sendCollRow(sel);
     store();
-}
-
-function soundreset() {
-    if (selected < 0 || selected >= sounds.length) {
-        return;
-    }
-    sounds[selected].vol = 0;
-    sounds[selected].trn = 0;
-    sendCollRow(selected);
-    sendSoundUI();
-    store();
-    if (soloOn) {
-        solo(0);          // Reset also leaves Solo
-    }
 }
 
 function zones(v) {
@@ -514,7 +558,7 @@ function zones(v) {
 
 function zone(v) {
     currentZone = clamp(Math.floor(v), 0, 2);
-    selected = -1;
+    sel = null;
     showMenu();
 }
 
@@ -524,13 +568,14 @@ function xfade(v) {
     sendZoneVisual();
 }
 
+// Restoring a saved set: the only time the pool is cleared and rebuilt compactly.
 function restore() {
     var args = arrayfromargs(arguments);
     if (String(args[0]) === "set") {
         args.shift();
     }
     if (args.join("|") === lastStored) {
-        return;   // our own "set" echoing back from pattr
+        return;   // our own value echoing back from pattr
     }
     var list = [];
     var i;
@@ -557,8 +602,22 @@ function restore() {
     if (list.length === 0) {
         return;   // empty or initial value: nothing to restore, don't wipe what's loaded
     }
-    sounds = list;
-    rebuild(null);
+    outlet(4, "set", EMPTY);              // detach the waveform before buffers go away
+    pool().clear();
+    var keep = [];
+    for (i = 0; i < list.length; i++) {
+        var buf = appendBuf(list[i].path);
+        if (buf > 0) {
+            list[i].buf = buf;
+            keep.push(list[i]);
+        }
+    }
+    if (keep.length < list.length) {
+        post("multiKey: " + (list.length - keep.length) + " saved sample(s) could not be found\n");
+    }
+    sounds = keep;
+    sel = null;
+    refresh(true);
 }
 
 function init() {
