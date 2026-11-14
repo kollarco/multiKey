@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.6.1, 2026-11-14
+- Fix: loaded sounds still weren't restored when reopening a set (settings were). The sample list was sent to the storage object with "set", which updates it silently, so Live never saw a change to save. It is now sent as a normal value.
+- An empty or initial stored value no longer wipes loaded sounds on load.
+- Preview moved to the top-right corner of the waveform (always visible).
+- Solo lights up blue while active; Reset also turns Solo off.
+
 ## v0.6, 2026-11-14
 - Fix: **the sample list is now saved with the Live set.** The storage object's "save with the set" flag was written to the wrong part of the file, so Max ignored it and nothing was saved (v0.1-v0.5).
 - New: **Preview** (Sound tab) plays the selected sound once at its original pitch, with its own Volume/Transpose.

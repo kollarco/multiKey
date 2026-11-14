@@ -300,7 +300,7 @@ def build_main():
     S = []   # boxes shown on the Sound tab
     Z = []   # boxes shown on the Zones tab
     m.comment("multiKey", pres=[8, 4, 80, 22], fontsize=16.0, fontface=1)
-    m.comment("v0.6", pres=[84, 9, 34, 16], fontsize=9.0)
+    m.comment("v0.6.1", pres=[84, 9, 34, 16], fontsize=9.0)
     G.append(m.comment("ENVELOPE", pres=[256, 24, 120, 14], fontsize=9.0, fontface=1))
     G.append(m.comment("PLAY", pres=[444, 24, 80, 14], fontsize=9.0, fontface=1))
     G.append(m.comment("RANDOM", pres=[548, 24, 80, 14], fontsize=9.0, fontface=1))
@@ -713,7 +713,7 @@ def build_main():
     S.append(m.comment("No sound selected", pres=[256, 26, 300, 16], fontsize=11.0, fontface=1))
     snd_name = S[-1]
     S.append(m.comment("Settings for the sound selected in the list on the left, on top of "
-                       "the Global settings. Solo: every note plays this sound.",
+                       "the Global settings. Solo: every note plays this sound (Reset or click again to leave).",
                        pres=[256, 44, 300, 28], fontsize=9.0, linecount=2))
 
     def snd_dial(longname, short, pres, mmin, mmax, unit, ptype):
@@ -725,13 +725,16 @@ def build_main():
                          invisible=2, initial_enable=0))   # hidden: values live in js
     d_svol = snd_dial("Sound Volume", "Volume", [256, 78, 44, 48], -36.0, 12.0, 4, 0)
     d_strn = snd_dial("Sound Transpose", "Transpose", [304, 78, 44, 48], -24.0, 24.0, 7, 1)
-    t_prev = m.add("live.text", pres=[360, 78, 60, 16], numinlets=1, numoutlets=2,
+    # Preview sits on the waveform's top-right corner (added after the drop target, so on top)
+    t_prev = m.add("live.text", pres=[192, 29, 49, 14], numinlets=1, numoutlets=2,
                    outlettype=["", ""], parameter_enable=0, mode=0, text="Preview")
-    t_solo = m.add("live.text", pres=[360, 98, 60, 16], numinlets=1, numoutlets=2,
-                   outlettype=["", ""], parameter_enable=0, mode=1, text="Solo", texton="Solo")
-    t_sreset = m.add("live.text", pres=[360, 118, 60, 16], numinlets=1, numoutlets=2,
+    t_solo = m.add("live.text", pres=[360, 82, 60, 16], numinlets=1, numoutlets=2,
+                   outlettype=["", ""], parameter_enable=0, mode=1, text="Solo", texton="Solo",
+                   activebgoncolor=[0.33, 0.62, 0.92, 1.0],      # Live's solo blue
+                   activetextoncolor=[0.0, 0.0, 0.0, 1.0])
+    t_sreset = m.add("live.text", pres=[360, 102, 60, 16], numinlets=1, numoutlets=2,
                      outlettype=["", ""], parameter_enable=0, mode=0, text="Reset")
-    S.extend([d_svol, d_strn, t_prev, t_solo, t_sreset])
+    S.extend([d_svol, d_strn, t_solo, t_sreset])
     pv_route = m.obj("route bang 1", 1, 3)
     pv_msg = m.msg("preview")
     m.wire(t_prev, 0, pv_route)
@@ -753,7 +756,7 @@ def build_main():
     m.wire(sr_route, 0, sr_msg)
     m.wire(sr_route, 1, sr_msg)
     m.wire(sr_msg, 0, loader)
-    ui_route = m.obj("route name vol trn label tp solo preview", 1, 8)
+    ui_route = m.obj("route name vol trn label tp solo preview solobtn", 1, 9)
     m.wire(loader, 5, ui_route)
     m.wire(ui_route, 0, snd_name)
     m.wire(ui_route, 1, d_svol)
@@ -761,6 +764,7 @@ def build_main():
     m.wire(ui_route, 3, countlbl)
     m.wire(ui_route, 5, solo_x, 1)
     m.wire(ui_route, 6, poly)                             # preview note straight to the voices
+    m.wire(ui_route, 7, t_solo)                           # "set 0/1": button shows js state
 
     # ---------- Zones tab ----------
     z_on = m.add("live.tab", pres=[256, 28, 80, 16], numinlets=1, numoutlets=3,

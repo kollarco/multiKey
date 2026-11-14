@@ -1,5 +1,10 @@
 # Testing multiKey
 
+## v0.6.1 checks
+- [ ] **Load sounds, save, close, reopen: the sounds are back** (if not, copy any "multiKey:" lines from the Max Console)
+- [ ] Preview button on the waveform's top-right corner works from any tab
+- [ ] Solo turns blue when on; clicking it again or pressing Reset turns it off
+
 ## v0.6 checks
 - [ ] **Save, close, reopen the set: samples (and zones, per-sound settings) come back**
 - [ ] Preview plays the selected sound once at its original pitch

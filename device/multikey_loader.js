@@ -15,7 +15,7 @@
 //   addfile                         file dialog, adds one sample to the current zone
 //   clear                           clear the current zone (Zones on) or everything (off)
 //   select <i>                      sound chosen in the menu (index into the visible list)
-//   soundvol <dB> / soundtrn <st> / soundreset   settings of the selected sound
+//   soundvol <dB> / soundtrn <st> / soundreset   settings of the selected sound (reset also ends Solo)
 //   zones <0|1>                     Zones off / on
 //   zone <0|1|2>                    zone shown in the list and targeted by loading
 //   xfade <semitones>               zone crossfade width
@@ -27,7 +27,7 @@
 // Outlets:
 //   0: count <n>                    total number of samples (gates note-ons)
 //   1: umenu                        clear / append <name> / set <i>
-//   2: pattr                        set mk3 path zone dB st ...
+//   2: pattr                        3 path zone dB st ...  (echo is ignored by restore)
 //   3: per-sound coll               clear / <index> <gain> <semitones>
 //   4: waveform~                    set <buffer name>   (blank buffer when nothing is selected)
 //   5: UI                           name|vol|trn|label set ... / tp <thispatcher message>
@@ -51,7 +51,7 @@ setoutletassist(7, "to zone table coll");
 
 var POOL = (jsarguments.length > 1) ? String(jsarguments[1]) : "mkpool";
 var EMPTY = (jsarguments.length > 2) ? String(jsarguments[2]) : "mkempty";   // blank buffer for the waveform
-var FORMAT = "mk3";               // mk3 path zone dB st ...
+var FORMAT = 3;                   // stored as: 3 path zone dB st ...  (number first = a plain list)
 var ZONE_NAMES = ["Low", "Mid", "High"];
 var ZONE_OCTAVE = [12, 0, -12];   // Low an octave up (bass samples are recorded low), High an octave down
 var BORDER1 = 47.5;               // between B1 (47) and C2 (48)
@@ -160,6 +160,7 @@ function durationOf(i) {
 
 function sendSolo() {
     outlet(5, "solo", (soloOn && selected >= 0) ? selected + 1 : 0);
+    outlet(5, "solobtn", "set", soloOn ? 1 : 0);
 }
 
 function folderFiles(path) {
@@ -198,12 +199,10 @@ function store() {
     for (i = 0; i < sounds.length; i++) {
         data.push(sounds[i].path, sounds[i].zone, sounds[i].vol, sounds[i].trn);
     }
+    // Send as a normal value (not "set"): Live only saves a parameter it sees change.
+    // pattr echoes it back to restore(), which ignores it via lastStored.
     lastStored = data.join("|");
-    if (sounds.length === 0) {
-        outlet(2, "set", "none");
-    } else {
-        outlet(2, ["set"].concat(data));
-    }
+    outlet(2, data);
 }
 
 function sendCollRow(i) {
@@ -502,6 +501,9 @@ function soundreset() {
     sendCollRow(selected);
     sendSoundUI();
     store();
+    if (soloOn) {
+        solo(0);          // Reset also leaves Solo
+    }
 }
 
 function zones(v) {
@@ -532,7 +534,7 @@ function restore() {
     var list = [];
     var i;
     var fmt = String(args[0]);
-    if (fmt === "mk3") {
+    if (fmt === "3" || fmt === "mk3") {
         for (i = 1; i + 3 < args.length; i += 4) {
             list.push({ path: String(args[i]),
                         zone: clamp(Math.floor(Number(args[i + 1]) || 0), 0, 2),
@@ -550,6 +552,9 @@ function restore() {
                 list.push({ path: s, zone: 1, vol: 0, trn: 0 });
             }
         }
+    }
+    if (list.length === 0) {
+        return;   // empty or initial value: nothing to restore, don't wipe what's loaded
     }
     sounds = list;
     rebuild(null);

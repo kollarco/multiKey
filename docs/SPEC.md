@@ -42,6 +42,7 @@ Live 12.4's Live API can load samples into Simpler (`SimplerDevice.replace_sampl
 
 ### v0.6
 - Saving fixed (pattr parameter mode lives in saved_object_attributes); Preview + Solo on the Sound tab; High zone −12 st
+- v0.6.1: sample list sent to pattr as a normal value (not "set") so Live registers the change; Preview on the waveform; blue Solo; Reset ends Solo
 
 ### Next candidates
 - MPE slide (CC74) and pressure → e.g. filter / volume per note
@@ -83,7 +84,7 @@ poly~ voice: groove~ plays <pool>.<index> at rate 2^(semitones/12), adsr~ envelo
 polybuffer~ <pool>  ◄── js multikey_loader.js (drop / dialogs / clear / select / per-sound settings / restore)
                           ├─► coll (index → gain, semitones), waveform~ (selected sound), Sound-tab UI
                           ├─► zone table coll (128 rows), urn sizes + zone base indices
-                          └─► pattr (blob) saves "mk3 path zone dB st ..." in the Live set
+                          └─► pattr (blob) saves "3 path zone dB st ..." in the Live set
 tabs: live.tab → thispatcher "script show/hide" on the Global / Sound / Zones box groups
 ```
 
@@ -97,6 +98,7 @@ tabs: live.tab → thispatcher "script show/hide" on the Global / Sound / Zones 
 - **Generated .amxd header must match Max's** (meta chunk value 1, project block). Suspected cause of the v0.3 crash (generated file + MPE flag); the Max-saved version loaded fine.
 - **MPE without poly~'s MPE mode:** voices store their note's channel and filter a broadcast bend bus. This keeps our own allocation and extra per-note data (sample, pan) intact.
 - **Zone logic precomputed in js:** the crossfade curve and empty-zone fallbacks become a 128-row lookup table, so the note path stays a single [coll] lookup plus one random draw.
+- **Write stored data to pattr as a normal value**, never with "set": Live only saves a parameter it sees change. The echo back to js is ignored by comparing with the last stored value. The list starts with a number so Max treats it as a plain list.
 - **Object-box parameter flags** (e.g. [pattr] parameter mode) go in `saved_object_attributes`, not on the box itself; Max ignores the box-level key.
 - **`---` names** make the sample pool unique per device instance, so two multiKeys on two tracks don't share samples.
 
