@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.3.1, 2026-11-14
+- Fix: v0.3 crashed Live when loading samples. The generated file header differed from what Max writes; the header and MPE fields now match a file saved by Max 9.1.
+- Fix: per-note MPE bends had no effect. MIDI is now parsed from the raw [midiin] stream (notes + pitch bend with real channels) instead of [notein]/[xbendin], which can report channel 1 for everything in Max for Live.
+
 ## v0.3, 2026-11-14
 - New: **MPE per-note pitch bend.** Each voice follows the bends on its own MIDI channel (channels 2-16). The device is marked MPE-enabled so Live sends per-note data.
 - New: **normal pitch wheel.** Bends on channel 1 move all notes together.

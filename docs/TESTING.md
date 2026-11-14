@@ -1,5 +1,11 @@
 # Testing multiKey
 
+## v0.3.1 checks
+- [ ] Loading samples no longer crashes
+- [ ] Notes still play normally (the MIDI input was rewritten)
+- [ ] Per-note bends: draw different pitch curves on two notes of a chord in the Note Expression tab; each note bends on its own
+- [ ] Pitch wheel on a normal keyboard still bends everything
+
 ## v0.3 checks
 - [ ] Volume feels right now (another -3 dB)
 - [ ] Normal pitch wheel bends all notes; *Wheel* range changes how far

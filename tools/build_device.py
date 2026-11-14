@@ -286,16 +286,70 @@ def build_main():
 
     # ---------- presentation: labels ----------
     m.comment("multiKey", pres=[8, 4, 120, 22], fontsize=16.0, fontface=1)
-    m.comment("v0.3", pres=[100, 9, 40, 16], fontsize=9.0)
+    m.comment("v0.3.1", pres=[100, 9, 40, 16], fontsize=9.0)
     m.comment("ENVELOPE", pres=[200, 8, 120, 16], fontsize=9.0, fontface=1)
     m.comment("PLAY", pres=[390, 8, 80, 16], fontsize=9.0, fontface=1)
     m.comment("RANDOM", pres=[485, 8, 80, 16], fontsize=9.0, fontface=1)
 
-    # ---------- MIDI in ----------
-    notein = m.obj("notein", 1, 3, ["int", "int", "int"])
+    # ---------- MIDI in: raw stream parser ----------
+    # [notein]/[xbendin] can report channel 1 for everything in Max for Live, which breaks
+    # MPE. So we parse raw [midiin] bytes ourselves: "type channel data1 data2".
+    midiin = m.obj("midiin", 1, 1, ["int"])
+    sp_data = m.obj("split 0 127", 3, 2, ["int", "int"])
+    m.wire(midiin, 0, sp_data)
+    sp_stat = m.obj("split 128 239", 3, 2, ["int", "int"])  # channel messages only
+    m.wire(sp_data, 1, sp_stat)
+    st_t = m.obj("t i i b", 1, 3, ["int", "int", "bang"])
+    m.wire(sp_stat, 0, st_t)
+    st_type = m.obj("expr $i1 >> 4", 1, 1)
+    st_ch = m.obj("expr ($i1 & 15) + 1", 1, 1)
+    type_store = m.obj("i", 2, 1, ["int"])
+    ch_store = m.obj("i", 2, 1, ["int"])
+    grp = m.obj("zl group 2", 2, 2)
+    grp_clr = m.msg("zlclear")
+    m.wire(st_t, 2, grp_clr)                              # new status: drop partial data
+    m.wire(grp_clr, 0, grp)
+    m.wire(st_t, 1, st_ch)
+    m.wire(st_ch, 0, ch_store, 1)
+    m.wire(st_t, 0, st_type)
+    m.wire(st_type, 0, type_store, 1)
+    m.wire(sp_data, 0, grp)                               # data bytes, paired (running status ok)
+    ev_t = m.obj("t b l b", 1, 3, ["bang", "", "bang"])
+    m.wire(grp, 0, ev_t)
+    ev_pk = m.obj("pack 0 0 0 0", 4, 1)                   # type ch d1 d2
+    ev_unp = m.obj("unpack 0 0", 1, 2, ["int", "int"])
+    m.wire(ev_t, 2, ch_store)
+    m.wire(ch_store, 0, ev_pk, 1)
+    m.wire(ev_t, 1, ev_unp)
+    m.wire(ev_unp, 1, ev_pk, 3)
+    m.wire(ev_unp, 0, ev_pk, 2)
+    m.wire(ev_t, 0, type_store)
+    m.wire(type_store, 0, ev_pk, 0)
+    ev_route = m.obj("route 9 8 14", 1, 4)                # note-on, note-off, pitch bend
+    m.wire(ev_pk, 0, ev_route)
+    # note-off -> note-on with velocity 0
+    off_slice = m.obj("zl slice 2", 2, 2)
+    off_app = m.obj("append 0", 1, 1)
+    m.wire(ev_route, 1, off_slice)
+    m.wire(off_slice, 0, off_app)
+    # notes: "ch pitch vel" -> channel first (cold), then "pitch vel"
+    note_t = m.obj("t l l", 1, 2, ["", ""])
+    m.wire(ev_route, 0, note_t)
+    m.wire(off_app, 0, note_t)
+    note_ch = m.obj("zl nth 1", 2, 2)
+    note_pv = m.obj("zl slice 1", 2, 2)
+    m.wire(note_t, 1, note_ch)
+    m.wire(note_t, 0, note_pv)
     pk_in = m.obj("pack 0 0", 2, 1)
-    m.wire(notein, 0, pk_in, 0)
-    m.wire(notein, 1, pk_in, 1)
+    m.wire(note_pv, 1, pk_in)
+    # bends: "ch lsb msb" -> value 0..16383
+    bend_t = m.obj("t l l", 1, 2, ["", ""])
+    m.wire(ev_route, 2, bend_t)
+    bend_ch = m.obj("zl nth 1", 2, 2)
+    bend_val = m.obj("expr $i2 + $i3*128", 3, 1)
+    m.wire(bend_t, 1, bend_ch)
+    m.wire(bend_t, 0, bend_val)
+
     rev = m.obj("zl rev", 2, 2)
     m.wire(pk_in, 0, rev)
     route0 = m.obj("route 0", 2, 2)
@@ -316,7 +370,7 @@ def build_main():
     m.wire(gate_n, 0, unp)
 
     pk = m.obj("pack 0 0 0 0. 0. 0. 0", 7, 1)             # pitch vel idx semis amp pan channel
-    m.wire(notein, 2, pk, 6)                              # channel arrives first (cold)
+    m.wire(note_ch, 0, pk, 6)                             # channel arrives first (cold)
     pre = m.obj("prepend midinote", 1, 1)
     m.wire(pk, 0, pre)
     m.wire(pre, 0, poly)
@@ -482,10 +536,9 @@ def build_main():
 
     # ---------- pitch bend / MPE ----------
     # channel 1 = master bend (all notes, normal pitch wheel), channels 2-16 = per-note (MPE)
-    xbend = m.obj("xbendin", 1, 2, ["int", "int"])
-    xb_pk = m.obj("pack 0 0", 2, 1)
-    m.wire(xbend, 1, xb_pk, 1)
-    m.wire(xbend, 0, xb_pk, 0)
+    xb_pk = m.obj("pack 0 0", 2, 1)                       # value channel
+    m.wire(bend_ch, 0, xb_pk, 1)
+    m.wire(bend_val, 0, xb_pk, 0)
     xb_rev = m.obj("zl rev", 2, 2)
     m.wire(xb_pk, 0, xb_rev)
     xb_route = m.obj("route 1", 2, 2)
@@ -601,7 +654,7 @@ def write_amxd(path, patcher_json, device_type=b"iiii"):
         f.write(device_type)                 # iiii = instrument
         f.write(b"meta")
         f.write(struct.pack("<I", 4))
-        f.write(b"\x00\x00\x00\x00")
+        f.write(struct.pack("<I", 1))        # value Max 9 writes
         f.write(b"ptch")
         f.write(struct.pack("<I", len(body)))
         f.write(body)
@@ -619,6 +672,18 @@ def main():
         "devicewidth": float(DEVICE_WIDTH),
         "latency": 0,
         "is_mpe": 1,                 # receive per-note channels/bends from Live
+        "external_mpe_tuning_enabled": 0,
+        "minimum_live_version": "",
+        "minimum_max_version": "",
+        "platform_compatibility": 0,
+        "project": {
+            "version": 1, "creationdate": 3877494390, "modificationdate": 3877494390,
+            "viewrect": [0.0, 0.0, 300.0, 500.0], "autoorganize": 1, "hideprojectwindow": 1,
+            "showdependencies": 1, "autolocalize": 0, "contents": {"patchers": {}},
+            "layout": {}, "searchpath": {}, "detailsvisible": 0,
+            "amxdtype": 1768515945, "readonly": 0, "devpathtype": 0, "devpath": ".",
+            "sortmode": 0, "viewmode": 0, "includepackages": 0,
+        },
         "dependency_cache": [
             {"name": "multikey.voice.maxpat", "bootpath": ".", "type": "JSON", "implicit": 1},
             {"name": "multikey_loader.js", "bootpath": ".", "type": "TEXT", "implicit": 1},
