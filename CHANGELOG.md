@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.3.1, 2026-11-14
+## v0.3.1, 2026-11-14 (confirmed working in Live 12: MPE bends, no crash)
 - Fix: v0.3 crashed Live when loading samples. The generated file header differed from what Max writes; the header and MPE fields now match a file saved by Max 9.1.
 - Fix: per-note MPE bends had no effect. MIDI is now parsed from the raw [midiin] stream (notes + pitch bend with real channels) instead of [notein]/[xbendin], which can report channel 1 for everything in Max for Live.
 
