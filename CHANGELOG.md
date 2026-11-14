@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.6.4, 2026-11-14
+- Removed the Reset button (Solo now shows its state, so Reset is no longer needed to leave it).
+- Removed the small second drop area under the Preview button (one drop crashed Live there). Drop onto the main part of the waveform.
+
 ## v0.6.3, 2026-11-14
 - Fix: Solo button never showed its on state. It lacked a proper on/off parameter definition, so its "on" value was drawn as off. It is now a real on/off toggle (not automated, not saved), in solo blue.
 

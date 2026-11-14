@@ -300,7 +300,7 @@ def build_main():
     S = []   # boxes shown on the Sound tab
     Z = []   # boxes shown on the Zones tab
     m.comment("multiKey", pres=[8, 4, 80, 22], fontsize=16.0, fontface=1)
-    m.comment("v0.6.3", pres=[84, 9, 34, 16], fontsize=9.0)
+    m.comment("v0.6.4", pres=[84, 9, 34, 16], fontsize=9.0)
     G.append(m.comment("ENVELOPE", pres=[256, 24, 120, 14], fontsize=9.0, fontface=1))
     G.append(m.comment("PLAY", pres=[444, 24, 80, 14], fontsize=9.0, fontface=1))
     G.append(m.comment("RANDOM", pres=[548, 24, 80, 14], fontsize=9.0, fontface=1))
@@ -635,12 +635,9 @@ def build_main():
                  bgcolor=[0.12, 0.12, 0.12, 1.0],
                  waveformcolor=[0.55, 0.83, 0.93, 1.0],
                  selectioncolor=[0.0, 0.0, 0.0, 0.0])
-    # drop target over the waveform, split in two so nothing sits under the Preview button
-    # (top-right corner 188..244 x 26..44)
+    # drop target over the waveform, stopping short of the Preview column on the right
     drop = m.add("dropfile", pres=[8, 26, 180, 80], numinlets=1, numoutlets=2,
                  outlettype=["", ""], border=0)
-    drop2 = m.add("dropfile", pres=[188, 44, 56, 62], numinlets=1, numoutlets=2,
-                  outlettype=["", ""], border=0)
     polybuf = m.obj("polybuffer~ %s" % POOL, 1, 2)
     m.obj("buffer~ ---mkempty 10", 1, 2, ["float", "bang"])   # blank waveform for empty zones
     loader = m.obj("js multikey_loader.js %s ---mkempty" % POOL, 1, 8)
@@ -654,9 +651,8 @@ def build_main():
     m.wire(loader, 4, wave)
     p_drop = m.obj("prepend drop", 1, 1)
     p_type = m.obj("prepend droptype", 1, 1)
-    for d in (drop, drop2):
-        m.wire(d, 1, p_type)
-        m.wire(d, 0, p_drop)
+    m.wire(drop, 1, p_type)
+    m.wire(drop, 0, p_drop)
     m.wire(p_type, 0, loader)
     m.wire(p_drop, 0, loader)
 
@@ -718,7 +714,7 @@ def build_main():
     S.append(m.comment("No sound selected", pres=[256, 26, 300, 16], fontsize=11.0, fontface=1))
     snd_name = S[-1]
     S.append(m.comment("Settings for the sound selected in the list on the left, on top of "
-                       "the Global settings. Solo: every note plays this sound (Reset or click again to leave).",
+                       "the Global settings. Solo: every note plays this sound (click again to leave).",
                        pres=[256, 44, 300, 28], fontsize=9.0, linecount=2))
 
     def snd_dial(longname, short, pres, mmin, mmax, unit, ptype):
@@ -747,9 +743,7 @@ def build_main():
                                   invisible=2, initial_enable=0),
                        **{k: {"expression": ""} for k in (
                            "activebgoncolor", "bgoncolor", "activetextoncolor", "textoncolor")}))
-    t_sreset = m.add("live.text", pres=[360, 102, 60, 16], numinlets=1, numoutlets=2,
-                     outlettype=["", ""], parameter_enable=0, mode=0, text="Reset")
-    S.extend([d_svol, d_strn, t_solo, t_sreset])
+    S.extend([d_svol, d_strn, t_solo])
     pv_route = m.obj("route bang 1", 1, 3)
     pv_msg = m.msg("preview")
     m.wire(t_prev, 0, pv_route)
@@ -765,12 +759,6 @@ def build_main():
     m.wire(d_strn, 0, p_strn)
     m.wire(p_svol, 0, loader)
     m.wire(p_strn, 0, loader)
-    sr_route = m.obj("route bang 1", 1, 3)
-    sr_msg = m.msg("soundreset")
-    m.wire(t_sreset, 0, sr_route)
-    m.wire(sr_route, 0, sr_msg)
-    m.wire(sr_route, 1, sr_msg)
-    m.wire(sr_msg, 0, loader)
     ui_route = m.obj("route name vol trn label tp solo preview solobtn", 1, 9)
     m.wire(loader, 5, ui_route)
     m.wire(ui_route, 0, snd_name)
