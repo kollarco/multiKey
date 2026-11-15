@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.1, 2026-11-15
+- The **Clear** button is now called **Clear all**, so it isn't confused with the new Remove button. Behaviour is unchanged (with Zones on it still empties only the zone you're viewing). Buttons re-spaced to fit.
+
 ## v0.8, 2026-11-15
 - New: **Remove** button under the sample list. It removes only the sound selected in the dropdown (in its zone, when Zones are on); **Clear** still empties the whole list (or the whole zone).
   - The selection moves to the sound that takes its place (the previous one if you removed the last).

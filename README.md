@@ -62,7 +62,7 @@ The first load can take a few seconds. You should see the **multiKey** panel wit
 ## Step 3: Load your one-shots
 
 - **Drag a folder** from Finder onto the waveform area. Every audio file in it is loaded and the old pool is replaced. Or drag several loose files to add them.
-- Or use the buttons under the list: **Load folder** (pick a folder), **Add file** (add one sample), **Remove** (remove only the sound selected in the dropdown), **Clear** (empty the whole list, or the whole zone when Zones are on).
+- Or use the buttons under the list: **Load folder** (pick a folder), **Add file** (add one sample), **Remove** (remove only the sound selected in the dropdown), **Clear all** (empty the whole list, or the whole zone when Zones are on).
 - Use the dropdown to look at any sound. Its waveform shows above it.
 
 **How samples are interpreted:** every one-shot is assumed to be recorded in **C**. **C3 (MIDI 60)** plays it at its original pitch and other notes transpose it. If your pack isn't in C, use the **Transpose** knob on the Global tab, or the per-sound Transpose on the Sound tab.
@@ -81,7 +81,7 @@ Tip: 8 to 30 sounds from one family (for example plucks, or pads) is the sweet s
 |---|---|---|
 | Left | Waveform / dropdown | Drop target and the selected sound's waveform. |
 | Left | **Preview** (top right of the waveform) | Plays the selected sound once at its original pitch. |
-| Left | Load folder, Add file, **Remove**, Clear | Manage the pool. Remove drops only the selected sound; Clear empties everything. |
+| Left | Load folder, Add file, **Remove**, **Clear all** | Manage the pool. Remove drops only the selected sound; Clear all empties everything. |
 | **Global** tab | Attack, Decay, Sustain, Release | Envelope for every sound. |
 | **Global** tab | **Spread** | Random stereo position per note. 0% = all centred, 100% = anywhere from hard left to hard right. |
 | **Global** tab | Transpose | Shifts everything (use it when your pack isn't in C). |
@@ -126,7 +126,7 @@ Then **close Live and reopen it**, and drag the device in again (or reload your 
 
 Please send:
 1. **What you did** (for example "dragged 20 wav files onto the waveform while a clip was playing").
-2. **Version**: the small label next to the *multiKey* title in the device (currently `v0.8`).
+2. **Version**: the small label next to the *multiKey* title in the device (currently `v0.8.1`).
 3. **Live version** and Mac model (Apple Silicon or Intel).
 4. If Live crashed, the newest file from `~/Library/Logs/DiagnosticReports` (look for "Live" in the name), and `Log.txt` from `~/Library/Preferences/Ableton/Live 12.x.x/`.
 5. If the device printed something: click the **Edit** button in the device's title bar (opens Max), then *Window > Max Console*, and copy any lines starting with `multiKey:`.
@@ -139,7 +139,7 @@ Please send:
 
 ## Status
 
-**v0.8, early prototype.** Loading, drag and drop, zones, MPE, Preview and Solo are confirmed working in Live 12. The crash-safe loading in v0.7 and restoring samples on reopen are still being tested. See [CHANGELOG.md](CHANGELOG.md) for what changed in each version.
+**v0.8.1, early prototype.** Loading, drag and drop, zones, MPE, Preview and Solo are confirmed working in Live 12. The crash-safe loading in v0.7 and restoring samples on reopen are still being tested. See [CHANGELOG.md](CHANGELOG.md) for what changed in each version.
 
 ## What it does
 

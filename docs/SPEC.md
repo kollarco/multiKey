@@ -50,6 +50,7 @@ Live 12.4's Live API can load samples into Simpler (`SimplerDevice.replace_sampl
 
 ### v0.8
 - Remove button: drops only the selected sound (crash-safe, same orphan-buffer approach); selection moves to the neighbour
+- v0.8.1: Clear renamed Clear all
 
 ### Next candidates
 - MPE slide (CC74) and pressure → e.g. filter / volume per note
