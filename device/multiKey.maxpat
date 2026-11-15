@@ -65,7 +65,7 @@
       34,
       16
      ],
-     "text": "v0.8",
+     "text": "v0.8.1",
      "numinlets": 1,
      "numoutlets": 0,
      "fontsize": 9.0
@@ -2993,7 +2993,7 @@
      "presentation_rect": [
       8,
       132,
-      66,
+      64,
       16
      ],
      "numinlets": 1,
@@ -3076,9 +3076,9 @@
      ],
      "presentation": 1,
      "presentation_rect": [
-      78,
+      76,
       132,
-      52,
+      48,
       16
      ],
      "numinlets": 1,
@@ -3142,9 +3142,9 @@
      ],
      "presentation": 1,
      "presentation_rect": [
-      134,
+      128,
       132,
-      56,
+      52,
       16
      ],
      "numinlets": 1,
@@ -3208,9 +3208,9 @@
      ],
      "presentation": 1,
      "presentation_rect": [
-      194,
+      184,
       132,
-      50,
+      60,
       16
      ],
      "numinlets": 1,
@@ -3221,7 +3221,7 @@
      ],
      "parameter_enable": 0,
      "mode": 0,
-     "text": "Clear"
+     "text": "Clear all"
     }
    },
    {
