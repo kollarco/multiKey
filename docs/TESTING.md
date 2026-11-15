@@ -1,5 +1,16 @@
 # Testing multiKey
 
+## v0.8 checks (Remove button)
+- [ ] Load 5+ sounds, pick one in the dropdown, click **Remove**: only that sound disappears; the next one becomes selected; the count drops by one
+- [ ] Remove the last sound in the list: the previous one becomes selected
+- [ ] Remove until the list is empty: waveform blanks, label says to drop a folder, no crash; notes make no sound
+- [ ] Play notes while removing a sound (also one that is ringing): no crash
+- [ ] Solo on, then Remove: Solo moves to the newly selected sound
+- [ ] Zones on: Remove only touches the sound in the zone you're looking at; other zones are untouched
+- [ ] Save, reopen: the removed sound stays gone and the others (with their settings) are back
+- [ ] The four buttons (Load folder, Add file, Remove, Clear) fit and read well; Clear still empties everything
+- [ ] Removed sounds never get picked again by the random pick
+
 ## v0.7 checks (crash fix)
 - [ ] Drag 10-20 files at once onto the waveform, several times in a row: no crash; all files appear in the list
 - [ ] Same while a MIDI clip is playing notes

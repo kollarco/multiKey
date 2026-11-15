@@ -21,6 +21,7 @@
 //   loadfolderpath <path>           folder chosen with the Load folder dialog
 //   addfile                         file dialog, adds one sample to the current zone
 //   clear                           clear the current zone (Zones on) or everything (off)
+//   removesel                       remove only the selected sound
 //   select <i>                      sound chosen in the menu (index into the visible list)
 //   soundvol <dB> / soundtrn <st>   settings of the selected sound
 //   zones <0|1>                     Zones off / on
@@ -493,6 +494,27 @@ function clear() {
         sel = null;
         refresh(true);
     }
+}
+
+// Remove only the sound selected in the menu. Like clear(), the buffer stays in the
+// pool (unreferenced): freeing it could crash a voice that is still playing it.
+// The selection moves to the sound that takes its place in the list (or the one
+// before it when the last one was removed).
+function removesel() {
+    if (!sel) {
+        post("multiKey: remove - no sound selected\n");
+        return;
+    }
+    var vis = visible();
+    var pos = vis.indexOf(sel);
+    var idx = sounds.indexOf(sel);
+    if (idx === -1) {
+        return;
+    }
+    sounds.splice(idx, 1);
+    vis = visible();
+    sel = vis.length > 0 ? vis[Math.min(Math.max(pos, 0), vis.length - 1)] : null;
+    refresh(true);
 }
 
 function select(i) {

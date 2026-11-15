@@ -300,7 +300,7 @@ def build_main():
     S = []   # boxes shown on the Sound tab
     Z = []   # boxes shown on the Zones tab
     m.comment("multiKey", pres=[8, 4, 80, 22], fontsize=16.0, fontface=1)
-    m.comment("v0.7", pres=[84, 9, 34, 16], fontsize=9.0)
+    m.comment("v0.8", pres=[84, 9, 34, 16], fontsize=9.0)
     G.append(m.comment("ENVELOPE", pres=[256, 24, 120, 14], fontsize=9.0, fontface=1))
     G.append(m.comment("PLAY", pres=[444, 24, 80, 14], fontsize=9.0, fontface=1))
     G.append(m.comment("RANDOM", pres=[548, 24, 80, 14], fontsize=9.0, fontface=1))
@@ -672,7 +672,7 @@ def build_main():
         m.wire(mm, 0, loader)
         return b
 
-    lf = m.add("live.text", pres=[8, 132, 90, 16], numinlets=1, numoutlets=2,
+    lf = m.add("live.text", pres=[8, 132, 66, 16], numinlets=1, numoutlets=2,
                outlettype=["", ""], parameter_enable=0, mode=0, text="Load folder")
     lf_r = m.obj("route bang 1", 1, 3)
     lf_dlg = m.obj("opendialog fold", 2, 2, ["", "bang"])
@@ -682,8 +682,9 @@ def build_main():
     m.wire(lf_r, 1, lf_dlg)
     m.wire(lf_dlg, 0, lf_p)
     m.wire(lf_p, 0, loader)
-    button("Add file", [102, 132, 70, 16], "addfile")
-    button("Clear", [176, 132, 68, 16], "clear")
+    button("Add file", [78, 132, 52, 16], "addfile")
+    button("Remove", [134, 132, 56, 16], "removesel")    # only the selected sound
+    button("Clear", [194, 132, 50, 16], "clear")
 
     menu = m.add("umenu", pres=[8, 110, 236, 18], numinlets=1, numoutlets=3,
                  outlettype=["int", "", ""], items=["(no samples - drop a folder)"])

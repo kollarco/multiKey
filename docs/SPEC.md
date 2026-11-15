@@ -18,7 +18,7 @@ Live 12.4's Live API can load samples into Simpler (`SimplerDevice.replace_sampl
 ## Scope
 
 ### v0.1 (done): the core "multikey" behaviour
-- One sample pool, any size; folder drop / folder dialog / add file / clear
+- One sample pool, any size; folder drop / folder dialog / add file / remove selected / clear
 - All samples assumed root **C3 = MIDI 60**; global transpose
 - A random pick per note, plus a chord window that deals unique samples within a chord
 - Seed: song-position-based picks while Live plays (reproducible renders), plus re-roll
@@ -47,6 +47,9 @@ Live 12.4's Live API can load samples into Simpler (`SimplerDevice.replace_sampl
 ### v0.7
 - Crash-safe loading: drops batched into one load; buffers never freed mid-session (removed sounds become unused orphans); compact rebuild only on set restore; slot map from zone position to buffer index
 - Reset button removed (v0.6.4); Solo is a proper on/off toggle (v0.6.3)
+
+### v0.8
+- Remove button: drops only the selected sound (crash-safe, same orphan-buffer approach); selection moves to the neighbour
 
 ### Next candidates
 - MPE slide (CC74) and pressure → e.g. filter / volume per note

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.8, 2026-11-15
+- New: **Remove** button under the sample list. It removes only the sound selected in the dropdown (in its zone, when Zones are on); **Clear** still empties the whole list (or the whole zone).
+  - The selection moves to the sound that takes its place (the previous one if you removed the last).
+  - Solo follows the new selection; the saved sample list is updated.
+  - Same crash-safe approach as v0.7: the sample's memory is not freed, it just stops being used until the set is reopened.
+- Button row re-spaced to fit four buttons: Load folder, Add file, Remove, Clear.
+
 ## v0.7, 2026-11-14
 - Fix: **crashes when dropping several sounds at once.** Every loaded file used to trigger a full wipe and reload of the sample pool, freeing memory that playing voices and the waveform display could still be reading.
   - Files from one drag are now batched into a single load.
